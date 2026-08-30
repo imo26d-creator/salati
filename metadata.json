@@ -1,0 +1,6 @@
+{
+  "name": "نُور",
+  "description": "تطبيق إسلامي متكامل يجمع الصلاة، الأذان، الأذكار، القرآن، القبلة، المواقيت، والسبحة بتصميم عصري وأنيق",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
