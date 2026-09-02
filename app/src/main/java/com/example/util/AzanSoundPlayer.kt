@@ -6,6 +6,7 @@ import android.media.AudioManager
 import android.media.AudioTrack
 import android.media.MediaPlayer
 import com.example.data.model.MuezzinVoice
+import com.example.data.model.PrayerType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -31,6 +32,9 @@ object AzanSoundPlayer {
     private val _playingMuezzin = MutableStateFlow<MuezzinVoice?>(null)
     val playingMuezzin: StateFlow<MuezzinVoice?> = _playingMuezzin.asStateFlow()
 
+    private val _playingPrayer = MutableStateFlow<PrayerType?>(null)
+    val playingPrayer: StateFlow<PrayerType?> = _playingPrayer.asStateFlow()
+
     fun stop() {
         try {
             currentJob?.cancel()
@@ -55,6 +59,7 @@ object AzanSoundPlayer {
         } finally {
             _isPlaying.value = false
             _playingMuezzin.value = null
+            _playingPrayer.value = null
         }
     }
 
@@ -64,12 +69,14 @@ object AzanSoundPlayer {
     fun playMuezzinPreview(
         muezzin: MuezzinVoice,
         volume: Float = 0.8f,
+        prayerType: PrayerType? = null,
         onComplete: (() -> Unit)? = null
     ) {
         stop()
 
         _isPlaying.value = true
         _playingMuezzin.value = muezzin
+        _playingPrayer.value = prayerType
 
         val safeVol = volume.coerceIn(0.05f, 1.0f)
 
@@ -293,6 +300,108 @@ object AzanSoundPlayer {
                 audioTrack.play()
             } catch (_: Exception) {
             }
+        }
+    }
+
+    /**
+     * Plays a crisp, gentle wooden bead click sound for Tasbih increment.
+     */
+    fun playTasbihClick(volume: Float = 0.6f) {
+        scope.launch {
+            try {
+                val sampleRate = 44100
+                val durationSec = 0.045 // 45ms crisp click
+                val numSamples = (durationSec * sampleRate).toInt()
+                val samples = ShortArray(numSamples)
+                val safeVol = volume.coerceIn(0.05f, 1.0f)
+
+                val freq1 = 1200.0
+                val freq2 = 800.0
+
+                for (i in 0 until numSamples) {
+                    val t = i.toDouble() / sampleRate
+                    val envelope = exp(-t * 90.0) // sharp percussive decay
+                    val wave = (0.7 * sin(2.0 * PI * freq1 * t) + 0.3 * sin(2.0 * PI * freq2 * t)) * envelope * safeVol
+                    samples[i] = (wave * Short.MAX_VALUE * 0.75).toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+                }
+
+                val audioTrack = AudioTrack.Builder()
+                    .setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build()
+                    )
+                    .setAudioFormat(
+                        AudioFormat.Builder()
+                            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                            .setSampleRate(sampleRate)
+                            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                            .build()
+                    )
+                    .setBufferSizeInBytes(samples.size * 2)
+                    .setTransferMode(AudioTrack.MODE_STATIC)
+                    .build()
+
+                audioTrack.write(samples, 0, samples.size)
+                audioTrack.setVolume(safeVol)
+                audioTrack.play()
+            } catch (_: Exception) {}
+        }
+    }
+
+    /**
+     * Plays an uplifting celebration chime when completing a Tasbih goal.
+     */
+    fun playGoalCompletionChime(volume: Float = 0.75f) {
+        scope.launch {
+            try {
+                val sampleRate = 44100
+                val durationSec = 1.0
+                val numSamples = (durationSec * sampleRate).toInt()
+                val samples = ShortArray(numSamples)
+                val safeVol = volume.coerceIn(0.05f, 1.0f)
+
+                // C5, E5, G5, C6 arpeggio notes
+                val chord = listOf(523.25, 659.25, 783.99, 1046.50)
+
+                for (i in 0 until numSamples) {
+                    val t = i.toDouble() / sampleRate
+                    var sumWave = 0.0
+                    for ((idx, freq) in chord.withIndex()) {
+                        val noteStart = idx * 0.12
+                        if (t >= noteStart) {
+                            val noteT = t - noteStart
+                            val env = exp(-noteT * 4.0)
+                            sumWave += (0.25 * sin(2.0 * PI * freq * noteT)) * env
+                        }
+                    }
+                    val finalWave = sumWave * safeVol
+                    samples[i] = (finalWave * Short.MAX_VALUE * 0.8).toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+                }
+
+                val audioTrack = AudioTrack.Builder()
+                    .setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build()
+                    )
+                    .setAudioFormat(
+                        AudioFormat.Builder()
+                            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                            .setSampleRate(sampleRate)
+                            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                            .build()
+                    )
+                    .setBufferSizeInBytes(samples.size * 2)
+                    .setTransferMode(AudioTrack.MODE_STATIC)
+                    .build()
+
+                audioTrack.write(samples, 0, samples.size)
+                audioTrack.setVolume(safeVol)
+                audioTrack.play()
+            } catch (_: Exception) {}
         }
     }
 

@@ -35,6 +35,9 @@ fun PrayerTimeScheduleCard(
     prayer: PrayerTimeInfo,
     isAzanEnabled: Boolean,
     onToggleAzan: () -> Unit,
+    muezzinName: String? = null,
+    volumePercent: Int? = null,
+    onConfigureSound: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val isNext = prayer.isNext
@@ -48,102 +51,149 @@ fun PrayerTimeScheduleCard(
         borderColor = if (isNext) SoftGold else GlassBorder.copy(alpha = 0.2f),
         borderWidth = if (isNext) 1.5.dp else 1.dp
     ) {
-        Row(
+        Column(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(14.dp)
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .background(
-                            when {
-                                isNext -> SoftGoldDark
-                                isPast -> MidnightNavySurface
-                                else -> EmeraldDark
-                            }
-                        )
-                        .border(
-                            1.dp,
-                            when {
-                                isNext -> SoftGoldBright
-                                else -> GlassBorder.copy(alpha = 0.3f)
-                            },
-                            CircleShape
-                        ),
-                    contentAlignment = Alignment.Center
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    Icon(
-                        imageVector = when (prayer.type) {
-                            PrayerType.FAJR -> Icons.Default.NightlightRound
-                            PrayerType.SUNRISE -> Icons.Default.WbSunny
-                            PrayerType.DHUHR -> Icons.Default.LightMode
-                            PrayerType.ASR -> Icons.Default.WbTwilight
-                            PrayerType.MAGHRIB -> Icons.Default.Brightness4
-                            PrayerType.ISHA -> Icons.Default.Bedtime
-                        },
-                        contentDescription = null,
-                        tint = if (isNext) SoftGoldBright else if (isPast) TextMuted else EmeraldLight,
-                        modifier = Modifier.size(22.dp)
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(
+                                when {
+                                    isNext -> SoftGoldDark
+                                    isPast -> MidnightNavySurface
+                                    else -> EmeraldDark
+                                }
+                            )
+                            .border(
+                                1.dp,
+                                when {
+                                    isNext -> SoftGoldBright
+                                    else -> GlassBorder.copy(alpha = 0.3f)
+                                },
+                                CircleShape
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = when (prayer.type) {
+                                PrayerType.FAJR -> Icons.Default.NightlightRound
+                                PrayerType.SUNRISE -> Icons.Default.WbSunny
+                                PrayerType.DHUHR -> Icons.Default.LightMode
+                                PrayerType.ASR -> Icons.Default.WbTwilight
+                                PrayerType.MAGHRIB -> Icons.Default.Brightness4
+                                PrayerType.ISHA -> Icons.Default.Bedtime
+                            },
+                            contentDescription = null,
+                            tint = if (isNext) SoftGoldBright else if (isPast) TextMuted else EmeraldLight,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+
+                    Column {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = prayer.type.arabicName,
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = if (isNext) FontWeight.Bold else FontWeight.SemiBold
+                                ),
+                                color = if (isNext) SoftGoldBright else IvoryWhite
+                            )
+                            if (isNext) {
+                                GlassTag(
+                                    text = "القادمة",
+                                    accentColor = SoftGold,
+                                    textColor = SoftGoldBright
+                                )
+                            }
+                        }
+                        Text(
+                            text = prayer.type.description,
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                            color = TextMuted
+                        )
+                    }
                 }
 
-                Column {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = prayer.type.arabicName,
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = if (isNext) FontWeight.Bold else FontWeight.SemiBold
-                            ),
-                            color = if (isNext) SoftGoldBright else IvoryWhite
-                        )
-                        if (isNext) {
-                            GlassTag(
-                                text = "القادمة",
-                                accentColor = SoftGold,
-                                textColor = SoftGoldBright
-                            )
-                        }
-                    }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     Text(
-                        text = prayer.type.description,
-                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                        color = TextMuted
+                        text = prayer.timeFormatted,
+                        style = MaterialTheme.typography.headlineMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 20.sp
+                        ),
+                        color = if (isNext) SoftGoldBright else IvoryWhite
                     )
+
+                    IconButton(
+                        onClick = onToggleAzan,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isAzanEnabled) Icons.Default.NotificationsActive else Icons.Default.NotificationsOff,
+                            contentDescription = "تنبيه الأذان",
+                            tint = if (isAzanEnabled) EmeraldLight else TextMuted,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = prayer.timeFormatted,
-                    style = MaterialTheme.typography.headlineMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 20.sp
-                    ),
-                    color = if (isNext) SoftGoldBright else IvoryWhite
-                )
-
-                IconButton(
-                    onClick = onToggleAzan,
-                    modifier = Modifier.size(36.dp)
+            // Optional Footer row showing assigned Muezzin & Volume with quick tap
+            if (muezzinName != null && volumePercent != null) {
+                Divider(color = GlassBorder.copy(alpha = 0.15f), thickness = 0.6.dp)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable(enabled = onConfigureSound != null) { onConfigureSound?.invoke() }
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = if (isAzanEnabled) Icons.Default.NotificationsActive else Icons.Default.NotificationsOff,
-                        contentDescription = "تنبيه الأذان",
-                        tint = if (isAzanEnabled) EmeraldLight else TextMuted,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.VolumeUp,
+                            contentDescription = null,
+                            tint = SoftGold,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = "$muezzinName • $volumePercent%",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
+                            color = if (isAzanEnabled) SoftGoldBright else TextMuted
+                        )
+                    }
+
+                    if (onConfigureSound != null) {
+                        Text(
+                            text = "تعديل ⚙️",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold
+                            ),
+                            color = EmeraldLight
+                        )
+                    }
                 }
             }
         }

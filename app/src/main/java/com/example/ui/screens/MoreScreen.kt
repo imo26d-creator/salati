@@ -40,11 +40,11 @@ fun MoreScreen(
     onVolumeChange: (Float) -> Unit = {},
     onToggleMuezzinPreview: (MuezzinVoice) -> Unit = {},
     onPlayToneTest: () -> Unit,
+    onOpenPrayerAzanSettings: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showRamadanSheet by remember { mutableStateOf(false) }
     var showSettingsSheet by remember { mutableStateOf(false) }
-    var showMuezzinSheet by remember { mutableStateOf(false) }
     var showTravelDialog by remember { mutableStateOf(false) }
     var showCalendarEventsDialog by remember { mutableStateOf(false) }
 
@@ -122,11 +122,11 @@ fun MoreScreen(
                     )
 
                     MoreFeatureCard(
-                        title = "صوت الأذان واختيار المؤذن 🕌",
-                        subtitle = "التحكم بمستوى الصوت (${(uiState.azanVolume * 100).toInt()}%) واختيار المؤذن المفضل",
+                        title = "صوت الأذان واختيار المؤذن لكل صلاة 🕌",
+                        subtitle = "تخصيص مؤذن مستقل ومستوى صوت دقيق لكل صلاة (${(uiState.azanVolume * 100).toInt()}%)",
                         icon = Icons.Default.Campaign,
                         accentColor = SoftGoldBright,
-                        onClick = { showMuezzinSheet = true }
+                        onClick = onOpenPrayerAzanSettings
                     )
 
                     MoreFeatureCard(
@@ -229,17 +229,6 @@ fun MoreScreen(
                     Text(text = "إغلاق", color = SoftGold)
                 }
             }
-        )
-    }
-
-    // Muezzin & Sound Settings Dialog
-    if (showMuezzinSheet) {
-        MuezzinSelectionDialog(
-            uiState = uiState,
-            onSelectMuezzin = onSelectMuezzin,
-            onVolumeChange = onVolumeChange,
-            onToggleMuezzinPreview = onToggleMuezzinPreview,
-            onDismiss = { showMuezzinSheet = false }
         )
     }
 

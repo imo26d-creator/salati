@@ -72,15 +72,34 @@ data class Surah(
     val translationMeaning: String,
     val totalVerses: Int,
     val revelationType: String, // مكية أو مدنية
+    val pageStart: Int = 1,
+    val juzNumber: Int = 1,
     val verses: List<QuranVerse> = emptyList()
 )
 
 data class QuranVerse(
     val ayahNumber: Int,
     val textArabic: String,
-    val translation: String,
+    val translation: String = "",
     val tafsirSummary: String = ""
 )
+
+data class QuranReciter(
+    val id: String,
+    val nameArabic: String,
+    val nameEnglish: String,
+    val rewayaArabic: String = "حفص عن عاصم",
+    val serverUrl: String,
+    val description: String = "",
+    val emojiAvatar: String = "🎙️"
+)
+
+enum class QuranRepeatMode(val titleArabic: String) {
+    OFF("بدون تكرار"),
+    ONE("تكرار السورة الحالية"),
+    ALL("تشغيل السور متتالية")
+}
+
 
 data class DuaItem(
     val id: String,
@@ -168,4 +187,24 @@ enum class MuezzinVoice(
 
     val arabicName: String get() = titleArabic
 }
+
+enum class AzanAlertType(
+    val titleArabic: String,
+    val descriptionArabic: String
+) {
+    FULL_AZAN("أذان كامل", "رفع الأذان كاملاً بصوت المؤذن المختار"),
+    TAKBEER_ONLY("تكبيرات فقط", "رفع التكبيرات الأولى فقط لتنبيه سريع"),
+    CHIME("نغمة سكينة هادئة", "نغمة وترية لطيفة وخافتة"),
+    VIBRATE_ONLY("اهتزاز فقط", "تنبيه بالاهتزاز بدون صوت"),
+    SILENT("صامت", "إشعار مرئي على الشاشة فقط")
+}
+
+data class PrayerAzanConfig(
+    val prayerType: PrayerType,
+    val isEnabled: Boolean = true,
+    val muezzin: MuezzinVoice = MuezzinVoice.MAKKAH,
+    val volume: Float = 0.85f,
+    val alertType: AzanAlertType = AzanAlertType.FULL_AZAN,
+    val preAlertMinutes: Int = 3
+)
 

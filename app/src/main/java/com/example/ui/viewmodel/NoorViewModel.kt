@@ -10,8 +10,14 @@ import com.example.data.local.*
 import com.example.data.model.*
 import com.example.data.repository.DailyCompanionRepository
 import com.example.data.repository.NoorRepository
+import com.example.data.repository.PresetDhikr
+import com.example.data.repository.QuranDataRepository
+import com.example.data.repository.TasbihCategory
+import com.example.data.repository.TasbihDataRepository
 import com.example.util.AzanSoundPlayer
 import com.example.util.CompassManager
+import com.example.util.PrayerNotificationScheduler
+import com.example.util.QuranAudioPlayer
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.isActive
@@ -48,9 +54,19 @@ data class NoorUiState(
     val quranTargetPages: Int = 5,
     val lastReadSurahName: String = "الفاتحة",
     val lastReadAyahNumber: Int = 1,
-    val tasbihCount: Int = 33,
-    val tasbihTarget: Int = 100,
-    val selectedDhikrName: String = "سبحان الله وبحمده",
+    val selectedQuranReciter: QuranReciter = QuranDataRepository.recitersList[0],
+    val quranReaderFontSize: Int = 22,
+    val selectedPresetDhikr: PresetDhikr = TasbihDataRepository.presetDhikrList[0],
+    val tasbihCount: Int = 0,
+    val tasbihTarget: Int = 33,
+    val tasbihLaps: Int = 0,
+    val todayTotalTasbihCount: Int = 33,
+    val selectedDhikrName: String = "سُبْحَانَ اللَّهِ",
+    val isTasbihHapticEnabled: Boolean = true,
+    val isTasbihSoundEnabled: Boolean = true,
+    val isTasbihFullScreenTapEnabled: Boolean = false,
+    val showTasbihGoalCelebration: Boolean = false,
+    val customDhikrList: List<PresetDhikr> = emptyList(),
     val dailyChecklist: DailyChecklistEntity = DailyChecklistEntity(""),
     val calculationMethod: CalculationMethod = CalculationMethod.UMM_AL_QURA,
     val juristicMethod: JuristicMethod = JuristicMethod.STANDARD,
@@ -70,7 +86,52 @@ data class NoorUiState(
     val selectedMuezzin: MuezzinVoice = MuezzinVoice.MAKKAH,
     val azanVolume: Float = 0.85f,
     val isAzanAudioPlaying: Boolean = false,
-    val playingMuezzin: MuezzinVoice? = null
+    val playingMuezzin: MuezzinVoice? = null,
+    val playingPrayer: PrayerType? = null,
+    val prayerAzanConfigs: Map<PrayerType, PrayerAzanConfig> = mapOf(
+        PrayerType.FAJR to PrayerAzanConfig(
+            prayerType = PrayerType.FAJR,
+            isEnabled = true,
+            muezzin = MuezzinVoice.MADINAH,
+            volume = 0.90f,
+            alertType = AzanAlertType.FULL_AZAN
+        ),
+        PrayerType.SUNRISE to PrayerAzanConfig(
+            prayerType = PrayerType.SUNRISE,
+            isEnabled = true,
+            muezzin = MuezzinVoice.TAKBEER_CHIME,
+            volume = 0.50f,
+            alertType = AzanAlertType.CHIME
+        ),
+        PrayerType.DHUHR to PrayerAzanConfig(
+            prayerType = PrayerType.DHUHR,
+            isEnabled = true,
+            muezzin = MuezzinVoice.MAKKAH,
+            volume = 0.80f,
+            alertType = AzanAlertType.FULL_AZAN
+        ),
+        PrayerType.ASR to PrayerAzanConfig(
+            prayerType = PrayerType.ASR,
+            isEnabled = true,
+            muezzin = MuezzinVoice.MISHARY,
+            volume = 0.80f,
+            alertType = AzanAlertType.FULL_AZAN
+        ),
+        PrayerType.MAGHRIB to PrayerAzanConfig(
+            prayerType = PrayerType.MAGHRIB,
+            isEnabled = true,
+            muezzin = MuezzinVoice.AL_AQSA,
+            volume = 0.85f,
+            alertType = AzanAlertType.FULL_AZAN
+        ),
+        PrayerType.ISHA to PrayerAzanConfig(
+            prayerType = PrayerType.ISHA,
+            isEnabled = true,
+            muezzin = MuezzinVoice.ABDULBASIT,
+            volume = 0.85f,
+            alertType = AzanAlertType.FULL_AZAN
+        )
+    )
 )
 
 class NoorViewModel(application: Application) : AndroidViewModel(application) {
@@ -124,6 +185,11 @@ class NoorViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             AzanSoundPlayer.playingMuezzin.collect { muezzin ->
                 _uiState.update { it.copy(playingMuezzin = muezzin) }
+            }
+        }
+        viewModelScope.launch {
+            AzanSoundPlayer.playingPrayer.collect { prayer ->
+                _uiState.update { it.copy(playingPrayer = prayer) }
             }
         }
     }
@@ -219,6 +285,7 @@ class NoorViewModel(application: Application) : AndroidViewModel(application) {
                 selectedDatePrayerTimes = selectedTimes
             )
         }
+        schedulePrayerNotifications()
     }
 
     private fun updateAtmosphereAndGreeting(now: Calendar) {
@@ -300,37 +367,185 @@ class NoorViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun incrementTasbih() {
-        compassManager.triggerHapticFeedback()
-        val newCount = _uiState.value.tasbihCount + 1
-        _uiState.update { it.copy(tasbihCount = newCount) }
+        val state = _uiState.value
+        if (state.isTasbihHapticEnabled) {
+            compassManager.triggerHapticFeedback()
+        }
+        if (state.isTasbihSoundEnabled) {
+            AzanSoundPlayer.playTasbihClick()
+        }
+
+        val target = state.tasbihTarget
+        val currentCount = state.tasbihCount
+        val nextCount = currentCount + 1
+        val newDailyTotal = state.todayTotalTasbihCount + 1
+
+        val hasReachedTarget = target > 0 && nextCount >= target
+        val newCount = if (hasReachedTarget) 0 else nextCount
+        val newLaps = if (hasReachedTarget) state.tasbihLaps + 1 else state.tasbihLaps
+        val showCelebration = hasReachedTarget
+
+        if (hasReachedTarget) {
+            if (state.isTasbihSoundEnabled) {
+                AzanSoundPlayer.playGoalCompletionChime()
+            }
+            if (state.isTasbihHapticEnabled) {
+                // Double vibration pulse for milestone
+                compassManager.triggerHapticFeedback()
+            }
+        }
+
+        _uiState.update {
+            it.copy(
+                tasbihCount = newCount,
+                tasbihLaps = newLaps,
+                todayTotalTasbihCount = newDailyTotal,
+                showTasbihGoalCelebration = showCelebration
+            )
+        }
+
         viewModelScope.launch {
             repository.saveTasbihRecord(
-                dhikrName = _uiState.value.selectedDhikrName,
-                count = newCount,
-                target = _uiState.value.tasbihTarget
+                dhikrName = state.selectedDhikrName,
+                count = if (hasReachedTarget) target else newCount,
+                target = target
             )
         }
     }
 
+    fun decrementTasbih() {
+        val state = _uiState.value
+        if (state.tasbihCount > 0) {
+            val newCount = state.tasbihCount - 1
+            val newDailyTotal = (state.todayTotalTasbihCount - 1).coerceAtLeast(0)
+            if (state.isTasbihHapticEnabled) {
+                compassManager.triggerHapticFeedback()
+            }
+            _uiState.update {
+                it.copy(
+                    tasbihCount = newCount,
+                    todayTotalTasbihCount = newDailyTotal
+                )
+            }
+            viewModelScope.launch {
+                repository.saveTasbihRecord(
+                    dhikrName = state.selectedDhikrName,
+                    count = newCount,
+                    target = state.tasbihTarget
+                )
+            }
+        }
+    }
+
     fun resetTasbih() {
-        _uiState.update { it.copy(tasbihCount = 0) }
+        val state = _uiState.value
+        if (state.isTasbihHapticEnabled) {
+            compassManager.triggerHapticFeedback()
+        }
+        _uiState.update {
+            it.copy(
+                tasbihCount = 0,
+                showTasbihGoalCelebration = false
+            )
+        }
         viewModelScope.launch {
             repository.saveTasbihRecord(
-                dhikrName = _uiState.value.selectedDhikrName,
+                dhikrName = state.selectedDhikrName,
                 count = 0,
-                target = _uiState.value.tasbihTarget
+                target = state.tasbihTarget
+            )
+        }
+    }
+
+    fun resetTasbihLaps() {
+        _uiState.update { it.copy(tasbihLaps = 0) }
+    }
+
+    fun dismissTasbihCelebration() {
+        _uiState.update { it.copy(showTasbihGoalCelebration = false) }
+    }
+
+    fun selectPresetDhikr(dhikr: PresetDhikr, target: Int? = null) {
+        val chosenTarget = target ?: dhikr.defaultTarget
+        _uiState.update {
+            it.copy(
+                selectedPresetDhikr = dhikr,
+                selectedDhikrName = dhikr.arabicText,
+                tasbihTarget = chosenTarget,
+                tasbihCount = 0,
+                tasbihLaps = 0,
+                showTasbihGoalCelebration = false
+            )
+        }
+    }
+
+    fun setTasbihTarget(target: Int) {
+        _uiState.update {
+            it.copy(
+                tasbihTarget = target,
+                tasbihCount = 0
+            )
+        }
+    }
+
+    fun toggleTasbihHaptic() {
+        _uiState.update { it.copy(isTasbihHapticEnabled = !it.isTasbihHapticEnabled) }
+    }
+
+    fun toggleTasbihSound() {
+        _uiState.update { it.copy(isTasbihSoundEnabled = !it.isTasbihSoundEnabled) }
+    }
+
+    fun toggleTasbihFullScreenTap() {
+        _uiState.update { it.copy(isTasbihFullScreenTapEnabled = !it.isTasbihFullScreenTapEnabled) }
+    }
+
+    fun addCustomDhikr(arabicText: String, target: Int = 33, virtue: String = "") {
+        val customDhikr = PresetDhikr(
+            id = "custom_${System.currentTimeMillis()}",
+            arabicText = arabicText.trim(),
+            transliteration = "",
+            translation = "",
+            defaultTarget = target,
+            category = TasbihCategory.CUSTOM,
+            virtueArabic = if (virtue.isBlank()) "ذكر مخصص من اختيارك وتقربك إلى الله." else virtue.trim(),
+            hadithReference = "ذكر شخصي",
+            isCustom = true
+        )
+        _uiState.update {
+            val updatedList = it.customDhikrList + customDhikr
+            it.copy(
+                customDhikrList = updatedList,
+                selectedPresetDhikr = customDhikr,
+                selectedDhikrName = customDhikr.arabicText,
+                tasbihTarget = target,
+                tasbihCount = 0,
+                tasbihLaps = 0
+            )
+        }
+    }
+
+    fun deleteCustomDhikr(id: String) {
+        _uiState.update {
+            val updatedList = it.customDhikrList.filterNot { item -> item.id == id }
+            val fallback = if (it.selectedPresetDhikr.id == id) TasbihDataRepository.presetDhikrList[0] else it.selectedPresetDhikr
+            it.copy(
+                customDhikrList = updatedList,
+                selectedPresetDhikr = fallback,
+                selectedDhikrName = fallback.arabicText
             )
         }
     }
 
     fun selectDhikr(name: String, target: Int = 100) {
-        _uiState.update {
-            it.copy(
-                selectedDhikrName = name,
-                tasbihTarget = target,
-                tasbihCount = 0
+        val matched = TasbihDataRepository.presetDhikrList.find { it.arabicText == name }
+            ?: PresetDhikr(
+                id = "custom_${System.currentTimeMillis()}",
+                arabicText = name,
+                defaultTarget = target,
+                category = TasbihCategory.TAHMID_TASBIH
             )
-        }
+        selectPresetDhikr(matched, target)
     }
 
     fun updateQuranProgress(pagesRead: Int, surahName: String = "", ayahNum: Int = 1) {
@@ -354,6 +569,15 @@ class NoorViewModel(application: Application) : AndroidViewModel(application) {
                 )
             )
         }
+    }
+
+    fun selectQuranReciter(reciter: QuranReciter) {
+        _uiState.update { it.copy(selectedQuranReciter = reciter) }
+        QuranAudioPlayer.setReciter(reciter)
+    }
+
+    fun setQuranReaderFontSize(fontSize: Int) {
+        _uiState.update { it.copy(quranReaderFontSize = fontSize.coerceIn(16, 38)) }
     }
 
     fun toggleChecklist(type: String) {
@@ -405,12 +629,14 @@ class NoorViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setPrePrayerAlertMinutes(minutes: Int) {
         _uiState.update { it.copy(prePrayerAlertMinutes = minutes) }
+        schedulePrayerNotifications()
     }
 
     fun togglePerPrayerAzan(prayerType: PrayerType) {
         val map = _uiState.value.prayerAzanEnabled.toMutableMap()
         map[prayerType] = !(map[prayerType] ?: true)
         _uiState.update { it.copy(prayerAzanEnabled = map) }
+        schedulePrayerNotifications()
     }
 
     fun toggleMosqueMode() {
@@ -434,15 +660,122 @@ class NoorViewModel(application: Application) : AndroidViewModel(application) {
         if (_uiState.value.isAzanAudioPlaying) {
             playMuezzinPreview(muezzin)
         }
+        schedulePrayerNotifications()
     }
 
     fun setAzanVolume(volume: Float) {
         val clamped = volume.coerceIn(0.0f, 1.0f)
         _uiState.update { it.copy(azanVolume = clamped) }
+        schedulePrayerNotifications()
+    }
+
+    fun setPrayerMuezzin(prayerType: PrayerType, muezzin: MuezzinVoice) {
+        _uiState.update { state ->
+            val currentMap = state.prayerAzanConfigs.toMutableMap()
+            val existing = currentMap[prayerType] ?: PrayerAzanConfig(prayerType = prayerType)
+            currentMap[prayerType] = existing.copy(muezzin = muezzin)
+            state.copy(prayerAzanConfigs = currentMap)
+        }
+        if (_uiState.value.isAzanAudioPlaying && _uiState.value.playingPrayer == prayerType) {
+            playPrayerAzanPreview(prayerType)
+        }
+        schedulePrayerNotifications()
+    }
+
+    fun setPrayerVolume(prayerType: PrayerType, volume: Float) {
+        val clamped = volume.coerceIn(0.0f, 1.0f)
+        _uiState.update { state ->
+            val currentMap = state.prayerAzanConfigs.toMutableMap()
+            val existing = currentMap[prayerType] ?: PrayerAzanConfig(prayerType = prayerType)
+            currentMap[prayerType] = existing.copy(volume = clamped)
+            state.copy(prayerAzanConfigs = currentMap)
+        }
+        schedulePrayerNotifications()
+    }
+
+    fun setPrayerAlertType(prayerType: PrayerType, alertType: AzanAlertType) {
+        _uiState.update { state ->
+            val currentMap = state.prayerAzanConfigs.toMutableMap()
+            val existing = currentMap[prayerType] ?: PrayerAzanConfig(prayerType = prayerType)
+            currentMap[prayerType] = existing.copy(
+                alertType = alertType,
+                isEnabled = alertType != AzanAlertType.SILENT
+            )
+            state.copy(prayerAzanConfigs = currentMap)
+        }
+        schedulePrayerNotifications()
+    }
+
+    fun setPrayerAzanEnabled(prayerType: PrayerType, enabled: Boolean) {
+        _uiState.update { state ->
+            val currentMap = state.prayerAzanConfigs.toMutableMap()
+            val existing = currentMap[prayerType] ?: PrayerAzanConfig(prayerType = prayerType)
+            currentMap[prayerType] = existing.copy(
+                isEnabled = enabled,
+                alertType = if (enabled) AzanAlertType.FULL_AZAN else AzanAlertType.SILENT
+            )
+            val prayerAzanMap = state.prayerAzanEnabled.toMutableMap()
+            prayerAzanMap[prayerType] = enabled
+            state.copy(
+                prayerAzanConfigs = currentMap,
+                prayerAzanEnabled = prayerAzanMap
+            )
+        }
+        schedulePrayerNotifications()
+    }
+
+    fun togglePrayerAzanEnabled(prayerType: PrayerType) {
+        val currentEnabled = _uiState.value.prayerAzanConfigs[prayerType]?.isEnabled
+            ?: (_uiState.value.prayerAzanEnabled[prayerType] ?: true)
+        setPrayerAzanEnabled(prayerType, !currentEnabled)
+    }
+
+    fun applyMuezzinToAllPrayers(muezzin: MuezzinVoice) {
+        _uiState.update { state ->
+            val newMap = state.prayerAzanConfigs.mapValues { (_, config) ->
+                config.copy(muezzin = muezzin)
+            }
+            state.copy(
+                selectedMuezzin = muezzin,
+                prayerAzanConfigs = newMap
+            )
+        }
+        schedulePrayerNotifications()
+    }
+
+    fun applyVolumeToAllPrayers(volume: Float) {
+        val clamped = volume.coerceIn(0.0f, 1.0f)
+        _uiState.update { state ->
+            val newMap = state.prayerAzanConfigs.mapValues { (_, config) ->
+                config.copy(volume = clamped)
+            }
+            state.copy(
+                azanVolume = clamped,
+                prayerAzanConfigs = newMap
+            )
+        }
+        schedulePrayerNotifications()
+    }
+
+    fun playPrayerAzanPreview(prayerType: PrayerType) {
+        val config = _uiState.value.prayerAzanConfigs[prayerType] ?: PrayerAzanConfig(prayerType = prayerType)
+        AzanSoundPlayer.playMuezzinPreview(
+            muezzin = config.muezzin,
+            volume = config.volume,
+            prayerType = prayerType
+        )
+    }
+
+    fun togglePrayerAzanPreview(prayerType: PrayerType) {
+        if (_uiState.value.isAzanAudioPlaying && _uiState.value.playingPrayer == prayerType) {
+            stopMuezzinPreview()
+        } else {
+            playPrayerAzanPreview(prayerType)
+        }
     }
 
     fun playMuezzinPreview(muezzin: MuezzinVoice) {
-        AzanSoundPlayer.playMuezzinPreview(muezzin, _uiState.value.azanVolume)
+        AzanSoundPlayer.playMuezzinPreview(muezzin, _uiState.value.azanVolume, prayerType = null)
     }
 
     fun stopMuezzinPreview() {
@@ -472,5 +805,32 @@ class NoorViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
         recalculatePrayerTimes()
+    }
+
+    fun schedulePrayerNotifications() {
+        try {
+            val times = _uiState.value.todayPrayerTimes
+            val configs = _uiState.value.prayerAzanConfigs
+            val preMinutes = _uiState.value.prePrayerAlertMinutes
+            PrayerNotificationScheduler.scheduleAllPrayerAlarms(
+                context = getApplication(),
+                prayerTimes = times,
+                configs = configs,
+                preAlertMinutes = preMinutes
+            )
+        } catch (_: Exception) {}
+    }
+
+    fun sendTestPrayerNotification(prayerType: PrayerType = PrayerType.DHUHR) {
+        try {
+            val config = _uiState.value.prayerAzanConfigs[prayerType] ?: PrayerAzanConfig(prayerType = prayerType)
+            PrayerNotificationScheduler.sendInstantTestNotification(
+                context = getApplication(),
+                prayerType = prayerType,
+                muezzin = config.muezzin,
+                alertType = config.alertType,
+                volume = config.volume
+            )
+        } catch (_: Exception) {}
     }
 }

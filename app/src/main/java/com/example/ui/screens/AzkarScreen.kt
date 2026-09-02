@@ -28,11 +28,25 @@ import com.example.ui.components.*
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.NoorUiState
 
+import com.example.data.repository.PresetDhikr
+import com.example.data.repository.TasbihCategory
+import com.example.data.repository.TasbihDataRepository
+
 @Composable
 fun AzkarScreen(
     uiState: NoorUiState,
     onIncrementTasbih: () -> Unit,
+    onDecrementTasbih: () -> Unit = {},
     onResetTasbih: () -> Unit,
+    onResetTasbihLaps: () -> Unit = {},
+    onSelectPresetDhikr: (PresetDhikr, Int?) -> Unit = { _, _ -> },
+    onSetTasbihTarget: (Int) -> Unit = {},
+    onToggleTasbihHaptic: () -> Unit = {},
+    onToggleTasbihSound: () -> Unit = {},
+    onToggleTasbihFullScreenTap: () -> Unit = {},
+    onAddCustomDhikr: (String, Int, String) -> Unit = { _, _, _ -> },
+    onDeleteCustomDhikr: (String) -> Unit = {},
+    onDismissTasbihCelebration: () -> Unit = {},
     onSelectTasbihDhikr: (String, Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -51,6 +65,56 @@ fun AzkarScreen(
                 dhikrList = list,
                 onClose = { activeCategoryReading = null }
             )
+        } else if (selectedTab == 1) {
+            // Dedicated full Digital Tasbih Screen Experience with back to tabs
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Tab Header Bar
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(MidnightNavySurface)
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    TabPill(
+                        label = "أذكار الحصن",
+                        isSelected = false,
+                        onClick = { selectedTab = 0 },
+                        modifier = Modifier.weight(1f)
+                    )
+                    TabPill(
+                        label = "السبحة الذكية 📿",
+                        isSelected = true,
+                        onClick = { selectedTab = 1 },
+                        modifier = Modifier.weight(1f)
+                    )
+                    TabPill(
+                        label = "موسوعة الأدعية",
+                        isSelected = false,
+                        onClick = { selectedTab = 2 },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                DigitalTasbihScreen(
+                    uiState = uiState,
+                    onBack = null,
+                    onIncrement = onIncrementTasbih,
+                    onDecrement = onDecrementTasbih,
+                    onReset = onResetTasbih,
+                    onResetLaps = onResetTasbihLaps,
+                    onSelectPresetDhikr = onSelectPresetDhikr,
+                    onSetTarget = onSetTasbihTarget,
+                    onToggleHaptic = onToggleTasbihHaptic,
+                    onToggleSound = onToggleTasbihSound,
+                    onToggleFullScreenTap = onToggleTasbihFullScreenTap,
+                    onAddCustomDhikr = onAddCustomDhikr,
+                    onDeleteCustomDhikr = onDeleteCustomDhikr,
+                    onDismissCelebration = onDismissTasbihCelebration
+                )
+            }
         } else {
             LazyColumn(
                 modifier = Modifier
@@ -92,7 +156,7 @@ fun AzkarScreen(
                             modifier = Modifier.weight(1f)
                         )
                         TabPill(
-                            label = "السبحة الذكية",
+                            label = "السبحة الذكية 📿",
                             isSelected = selectedTab == 1,
                             onClick = { selectedTab = 1 },
                             modifier = Modifier.weight(1f)
@@ -144,20 +208,6 @@ fun AzkarScreen(
                                     }
                                 }
                             }
-                        }
-                    }
-
-                    1 -> {
-                        // Digital Tasbih View
-                        item {
-                            FuturisticDigitalTasbih(
-                                count = uiState.tasbihCount,
-                                target = uiState.tasbihTarget,
-                                selectedDhikrName = uiState.selectedDhikrName,
-                                onIncrement = onIncrementTasbih,
-                                onReset = onResetTasbih,
-                                onSelectDhikr = onSelectTasbihDhikr
-                            )
                         }
                     }
 

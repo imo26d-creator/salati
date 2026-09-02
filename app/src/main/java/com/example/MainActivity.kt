@@ -75,11 +75,12 @@ class MainActivity : ComponentActivity() {
                 var showSettingsDialog by remember { mutableStateOf(false) }
                 var showMuezzinDialog by remember { mutableStateOf(false) }
                 var showMosqueModeDialog by remember { mutableStateOf(false) }
+                var showPrayerAzanSettingsScreen by remember { mutableStateOf(false) }
 
                 val context = LocalContext.current
 
-                // Request location permissions on startup to automatically calibrate prayer times & Qibla
-                val locationPermissionLauncher = rememberLauncherForActivityResult(
+                // Request permissions (Location + Notifications on Android 13+)
+                val permissionLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.RequestMultiplePermissions()
                 ) { permissions ->
                     val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true
@@ -110,15 +111,16 @@ class MainActivity : ComponentActivity() {
                 }
 
                 LaunchedEffect(Unit) {
-                    val hasFine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-                    if (!hasFine) {
-                        locationPermissionLauncher.launch(
-                            arrayOf(
-                                Manifest.permission.ACCESS_FINE_LOCATION,
-                                Manifest.permission.ACCESS_COARSE_LOCATION
-                            )
-                        )
+                    val permissionsToRequest = mutableListOf(
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                    )
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                        if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                            permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
+                        }
                     }
+                    permissionLauncher.launch(permissionsToRequest.toTypedArray())
                 }
 
                 Scaffold(
@@ -160,13 +162,13 @@ class MainActivity : ComponentActivity() {
                                     onOpenSettings = { showSettingsDialog = true }
                                 )
 
-                                NoorNavTab.PRAYERS -> PrayersScreen(
+                                 NoorNavTab.PRAYERS -> PrayersScreen(
                                     uiState = uiState,
                                     onSelectDate = { viewModel.setSelectedDate(it) },
                                     onLogStatus = { type, status -> viewModel.logPrayerStatus(type, status) },
                                     onToggleAzan = { viewModel.togglePerPrayerAzan(it) },
                                     onOpenSettings = { showSettingsDialog = true },
-                                    onOpenMuezzinSelection = { showMuezzinDialog = true }
+                                    onOpenMuezzinSelection = { showPrayerAzanSettingsScreen = true }
                                 )
 
                                 NoorNavTab.QIBLA -> QiblaScreen(
@@ -181,13 +183,25 @@ class MainActivity : ComponentActivity() {
                                     onAddPage = { viewModel.updateQuranProgress(uiState.quranPagesRead + 1) },
                                     onBookmarkAyah = { surahNum, ayahNum, surahName, ayahText ->
                                         viewModel.addBookmark(surahNum, ayahNum, surahName, ayahText)
-                                    }
+                                    },
+                                    onSelectReciter = { viewModel.selectQuranReciter(it) },
+                                    onFontSizeChange = { viewModel.setQuranReaderFontSize(it) }
                                 )
 
                                 NoorNavTab.AZKAR -> AzkarScreen(
                                     uiState = uiState,
                                     onIncrementTasbih = { viewModel.incrementTasbih() },
+                                    onDecrementTasbih = { viewModel.decrementTasbih() },
                                     onResetTasbih = { viewModel.resetTasbih() },
+                                    onResetTasbihLaps = { viewModel.resetTasbihLaps() },
+                                    onSelectPresetDhikr = { dhikr, target -> viewModel.selectPresetDhikr(dhikr, target) },
+                                    onSetTasbihTarget = { viewModel.setTasbihTarget(it) },
+                                    onToggleTasbihHaptic = { viewModel.toggleTasbihHaptic() },
+                                    onToggleTasbihSound = { viewModel.toggleTasbihSound() },
+                                    onToggleTasbihFullScreenTap = { viewModel.toggleTasbihFullScreenTap() },
+                                    onAddCustomDhikr = { ar, target, virtue -> viewModel.addCustomDhikr(ar, target, virtue) },
+                                    onDeleteCustomDhikr = { viewModel.deleteCustomDhikr(it) },
+                                    onDismissTasbihCelebration = { viewModel.dismissTasbihCelebration() },
                                     onSelectTasbihDhikr = { name, target -> viewModel.selectDhikr(name, target) }
                                 )
 
@@ -205,11 +219,50 @@ class MainActivity : ComponentActivity() {
                                     onSelectMuezzin = { viewModel.setSelectedMuezzin(it) },
                                     onVolumeChange = { viewModel.setAzanVolume(it) },
                                     onToggleMuezzinPreview = { viewModel.toggleMuezzinPreview(it) },
-                                    onPlayToneTest = { viewModel.playPreviewChime(false) }
+                                    onPlayToneTest = { viewModel.playPreviewChime(false) },
+                                    onOpenPrayerAzanSettings = { showPrayerAzanSettingsScreen = true }
                                 )
                             }
                         }
                     }
+                }
+
+                // Dedicated Prayer Azan & Muezzin Customization Screen Overlay
+                if (showPrayerAzanSettingsScreen) {
+                    PrayerAzanSettingsScreen(
+                        uiState = uiState,
+                        onBack = { showPrayerAzanSettingsScreen = false },
+                        onSetPrayerMuezzin = { prayer, muezzin ->
+                            viewModel.setPrayerMuezzin(prayer, muezzin)
+                        },
+                        onSetPrayerVolume = { prayer, vol ->
+                            viewModel.setPrayerVolume(prayer, vol)
+                        },
+                        onSetPrayerAlertType = { prayer, alertType ->
+                            viewModel.setPrayerAlertType(prayer, alertType)
+                        },
+                        onTogglePrayerEnabled = { prayer ->
+                            viewModel.togglePrayerAzanEnabled(prayer)
+                        },
+                        onApplyMuezzinToAll = { muezzin ->
+                            viewModel.applyMuezzinToAllPrayers(muezzin)
+                        },
+                        onApplyVolumeToAll = { vol ->
+                            viewModel.applyVolumeToAllPrayers(vol)
+                        },
+                        onTogglePrayerPreview = { prayer ->
+                            viewModel.togglePrayerAzanPreview(prayer)
+                        },
+                        onStopAudioPreview = {
+                            viewModel.stopMuezzinPreview()
+                        },
+                        onPreAlertChange = { mins ->
+                            viewModel.setPrePrayerAlertMinutes(mins)
+                        },
+                        onSendTestNotification = { prayer ->
+                            viewModel.sendTestPrayerNotification(prayer)
+                        }
+                    )
                 }
 
                 // Global Dialogs

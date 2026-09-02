@@ -196,7 +196,7 @@ fun PrayersScreen(
 
                             Column {
                                 Text(
-                                    text = "صوت المؤذن: ${uiState.selectedMuezzin.titleArabic.substringBefore(" (")}",
+                                    text = "تخصيص صوت ومستوى الأذان لكل صلاة",
                                     style = MaterialTheme.typography.titleMedium.copy(
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 13.sp
@@ -204,7 +204,7 @@ fun PrayersScreen(
                                     color = IvoryWhite
                                 )
                                 Text(
-                                    text = "مستوى الصوت: ${(uiState.azanVolume * 100).toInt()}% • اضغط للتغيير والتجربة",
+                                    text = "المؤذن الحالي: ${uiState.selectedMuezzin.titleArabic.substringBefore(" (")} • اضغط للتخصيص الكامل",
                                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                                     color = SoftGoldBright
                                 )
@@ -222,10 +222,18 @@ fun PrayersScreen(
 
             // List of Prayer Cards (Fajr, Sunrise, Dhuhr, Asr, Maghrib, Isha)
             items(uiState.selectedDatePrayerTimes) { prayer ->
+                val prayerConfig = uiState.prayerAzanConfigs[prayer.type]
+                val isAzanActive = prayerConfig?.isEnabled ?: (uiState.prayerAzanEnabled[prayer.type] ?: true)
+                val assignedMuezzinName = prayerConfig?.muezzin?.titleArabic?.substringBefore(" (") ?: uiState.selectedMuezzin.titleArabic.substringBefore(" (")
+                val assignedVol = ((prayerConfig?.volume ?: uiState.azanVolume) * 100).toInt()
+
                 PrayerTimeScheduleCard(
                     prayer = prayer,
-                    isAzanEnabled = uiState.prayerAzanEnabled[prayer.type] ?: true,
-                    onToggleAzan = { onToggleAzan(prayer.type) }
+                    isAzanEnabled = isAzanActive,
+                    onToggleAzan = { onToggleAzan(prayer.type) },
+                    muezzinName = assignedMuezzinName,
+                    volumePercent = assignedVol,
+                    onConfigureSound = onOpenMuezzinSelection
                 )
             }
 
