@@ -48,11 +48,17 @@ fun PrayerAzanSettingsScreen(
     onStopAudioPreview: () -> Unit,
     onPreAlertChange: (Int) -> Unit,
     onSendTestNotification: (PrayerType) -> Unit = {},
+    onToggleAutoPhoneTime: (Boolean) -> Unit = {},
+    onSyncWithPhoneNow: () -> Unit = {},
+    onToggle24HourFormat: (Boolean) -> Unit = {},
+    onSetPrayerManualOffset: (PrayerType, Int) -> Unit = { _, _ -> },
+    onResetPrayerManualOffsets: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var selectedFilterPrayer by remember { mutableStateOf<PrayerType?>(null) }
     var showBatchMuezzinPicker by remember { mutableStateOf(false) }
     var activeMuezzinPickerPrayer by remember { mutableStateOf<PrayerType?>(null) }
+    var showManualOffsetsSection by remember { mutableStateOf(false) }
 
     val prayersList = remember {
         listOf(
@@ -71,7 +77,7 @@ fun PrayerAzanSettingsScreen(
                 title = {
                     Column {
                         Text(
-                            text = "إعدادات الأذان والمؤذنين",
+                            text = "إعدادات الأذان والوقت",
                             style = MaterialTheme.typography.titleLarge.copy(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 18.sp
@@ -79,7 +85,7 @@ fun PrayerAzanSettingsScreen(
                             color = IvoryWhite
                         )
                         Text(
-                            text = "تخصيص صوت ومستوى أذان كل صلاة بشكل مستقل",
+                            text = "مزامنة التوقيت مع هاتفك وتخصيص الأذان والتكبيرات",
                             style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                             color = SoftGoldBright
                         )
@@ -122,6 +128,340 @@ fun PrayerAzanSettingsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             contentPadding = PaddingValues(top = 8.dp, bottom = 32.dp)
         ) {
+            // Section 0: Device Time & Automatic Phone Synchronization (Directly from phone)
+            item {
+                GlassCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    backgroundColor = MidnightNavySurface.copy(alpha = 0.95f),
+                    borderColor = SoftGoldBright.copy(alpha = 0.5f)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // Header: Phone Time Live Display
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(42.dp)
+                                        .clip(CircleShape)
+                                        .background(EmeraldDark.copy(alpha = 0.6f))
+                                        .border(1.dp, SoftGoldBright, CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Schedule,
+                                        contentDescription = null,
+                                        tint = SoftGoldBright,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+
+                                Column {
+                                    Text(
+                                        text = "توقيت الهاتف الحالي والمزامنة",
+                                        style = MaterialTheme.typography.titleMedium.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 15.sp
+                                        ),
+                                        color = IvoryWhite
+                                    )
+                                    Text(
+                                        text = if (uiState.deviceCurrentTimeFormatted.isNotEmpty())
+                                            "الساعة الآن: ${uiState.deviceCurrentTimeFormatted}"
+                                        else
+                                            "مربوط مباشرة بساعة هاتفك الذكي",
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp
+                                        ),
+                                        color = SoftGoldBright
+                                    )
+                                }
+                            }
+
+                            GlassTag(
+                                text = "مباشر ⏱️",
+                                accentColor = EmeraldPrimary,
+                                textColor = EmeraldLight
+                            )
+                        }
+
+                        // Timezone and sync status row
+                        if (uiState.deviceTimeZoneName.isNotEmpty()) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(MidnightNavyCard.copy(alpha = 0.6f))
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "المنطقة الزمنية للجهاز:",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                    color = IvoryMuted
+                                )
+                                Text(
+                                    text = uiState.deviceTimeZoneName,
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 11.sp
+                                    ),
+                                    color = SoftGoldBright
+                                )
+                            }
+                        }
+
+                        // Confirmation notification if user just pressed sync
+                        AnimatedVisibility(visible = uiState.timeSyncSuccessMessage != null) {
+                            uiState.timeSyncSuccessMessage?.let { msg ->
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(EmeraldDark.copy(alpha = 0.8f))
+                                        .border(1.dp, EmeraldLight, RoundedCornerShape(8.dp))
+                                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.CheckCircle,
+                                            contentDescription = null,
+                                            tint = EmeraldLight,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Text(
+                                            text = msg,
+                                            style = MaterialTheme.typography.bodySmall.copy(
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 12.sp
+                                            ),
+                                            color = IvoryWhite
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Divider(color = GlassBorder.copy(alpha = 0.3f), thickness = 0.8.dp)
+
+                        // Toggle 1: Auto Phone Time Sync Switch
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "المزامنة التلقائية حسب وقت الهاتف مباشرة",
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                    color = IvoryWhite
+                                )
+                                Text(
+                                    text = "تحديث مواقيت الصلاة والعد التنازلي لحظياً وفق ساعة الهاتف",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                    color = IvoryMuted
+                                )
+                            }
+                            Switch(
+                                checked = uiState.isAutoPhoneTime,
+                                onCheckedChange = onToggleAutoPhoneTime,
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = SoftGoldBright,
+                                    checkedTrackColor = EmeraldPrimary,
+                                    uncheckedThumbColor = TextMuted,
+                                    uncheckedTrackColor = MidnightNavyCard
+                                )
+                            )
+                        }
+
+                        // Toggle 2: 12-Hour vs 24-Hour Format Switch
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "تنسيق عرض الوقت",
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                    color = IvoryWhite
+                                )
+                                Text(
+                                    text = if (uiState.is24HourFormat) "صيغة 24 ساعة (مثال: 15:30)" else "صيغة 12 ساعة (مثال: 03:30 م)",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                    color = SoftGoldBright
+                                )
+                            }
+                            Switch(
+                                checked = uiState.is24HourFormat,
+                                onCheckedChange = onToggle24HourFormat,
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = SoftGoldBright,
+                                    checkedTrackColor = EmeraldPrimary,
+                                    uncheckedThumbColor = TextMuted,
+                                    uncheckedTrackColor = MidnightNavyCard
+                                )
+                            )
+                        }
+
+                        // Action Buttons: Instant Sync & Manual Adjustments Toggle
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = onSyncWithPhoneNow,
+                                colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Sync,
+                                    contentDescription = null,
+                                    tint = IvoryWhite,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "مزامنة فورية الآن 🔄",
+                                    style = MaterialTheme.typography.labelMedium.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp
+                                    ),
+                                    color = IvoryWhite
+                                )
+                            }
+
+                            OutlinedButton(
+                                onClick = { showManualOffsetsSection = !showManualOffsetsSection },
+                                shape = RoundedCornerShape(12.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, SoftGold.copy(alpha = 0.5f)),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = SoftGoldBright),
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (showManualOffsetsSection) Icons.Default.ExpandLess else Icons.Default.Tune,
+                                    contentDescription = null,
+                                    tint = SoftGoldBright,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (showManualOffsetsSection) "إخفاء الضبط اليدوي" else "ضبط المسجد (±دقائق)",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp),
+                                    color = SoftGoldBright
+                                )
+                            }
+                        }
+
+                        // Expandable Manual Offsets Section (ضبط دقائق الصلاة حسب المسجد المحلي)
+                        AnimatedVisibility(visible = showManualOffsetsSection) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(MidnightNavyCard.copy(alpha = 0.9f))
+                                    .border(1.dp, GlassBorder.copy(alpha = 0.3f), RoundedCornerShape(10.dp))
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "تعديل دقائق الصلاة يدوياً (للتطابق مع مسجد حيك):",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = SoftGoldBright
+                                    )
+                                    TextButton(
+                                        onClick = onResetPrayerManualOffsets,
+                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Text("إعادة ضبط (0)", fontSize = 11.sp, color = IvoryMuted)
+                                    }
+                                }
+
+                                prayersList.filter { it != PrayerType.SUNRISE }.forEach { prayer ->
+                                    val offset = uiState.prayerManualOffsets[prayer] ?: 0
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(MidnightNavySurface.copy(alpha = 0.5f))
+                                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "صلاة ${prayer.arabicName}",
+                                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                            color = IvoryWhite
+                                        )
+
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            IconButton(
+                                                onClick = { onSetPrayerManualOffset(prayer, offset - 1) },
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.RemoveCircleOutline,
+                                                    contentDescription = "تقليل دقيقة",
+                                                    tint = SoftGold,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
+
+                                            Text(
+                                                text = if (offset > 0) "+$offset د" else if (offset < 0) "$offset د" else "0 د",
+                                                style = MaterialTheme.typography.labelMedium.copy(
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 12.sp
+                                                ),
+                                                color = if (offset != 0) EmeraldLight else IvoryMuted,
+                                                modifier = Modifier.width(36.dp),
+                                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                            )
+
+                                            IconButton(
+                                                onClick = { onSetPrayerManualOffset(prayer, offset + 1) },
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.AddCircleOutline,
+                                                    contentDescription = "زيادة دقيقة",
+                                                    tint = SoftGoldBright,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             // Section 1: Hero Banner & Quick Unified Actions
             item {
                 GlassCard(
@@ -376,7 +716,7 @@ fun PrayerAzanSettingsScreen(
                         }
 
                         Text(
-                            text = "إصدار نغمة سكينة لطيفة لإعداد الوضوء قبل رفع الأذان:",
+                            text = "إصدار تكبيرات الأذان الشرعية أو صوت مقرئ للتنبيه قبل رفع الأذان (خالٍ تماماً من الموسيقى):",
                             style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                             color = IvoryMuted
                         )
@@ -411,6 +751,60 @@ fun PrayerAzanSettingsScreen(
                                         color = if (isSelected) IvoryWhite else TextMuted
                                     )
                                 }
+                            }
+                        }
+
+                        // Preview pure Takbeer alert button (no music)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    com.example.util.AzanSoundPlayer.playTakbeerAlert(uiState.azanVolume)
+                                },
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = SoftGoldBright),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, SoftGold.copy(alpha = 0.4f)),
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Campaign,
+                                    contentDescription = null,
+                                    tint = SoftGoldBright,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "سماع تكبيرات التنبيه 🕋",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                    color = IvoryWhite
+                                )
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    com.example.util.AzanSoundPlayer.playReciterAyahAlert(uiState.azanVolume)
+                                },
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = EmeraldLight),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, EmeraldLight.copy(alpha = 0.4f)),
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.RecordVoiceOver,
+                                    contentDescription = null,
+                                    tint = EmeraldLight,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "سماع صوت المقرئ 📖",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                    color = IvoryWhite
+                                )
                             }
                         }
                     }

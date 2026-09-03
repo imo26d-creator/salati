@@ -197,11 +197,18 @@ object PrayerNotificationScheduler {
             manager.notify(prayerType.ordinal + 100, notification)
         } catch (_: SecurityException) {}
 
-        // Trigger Audio preview
-        if (alertType == AzanAlertType.FULL_AZAN || alertType == AzanAlertType.TAKBEER_ONLY) {
-            AzanSoundPlayer.playMuezzinPreview(muezzin, volume, prayerType)
-        } else if (alertType == AzanAlertType.CHIME) {
-            AzanSoundPlayer.playAlertChime(isFullAzanTone = true, volume = volume)
+        // Trigger Audio preview (Free from any musical instruments)
+        when (alertType) {
+            AzanAlertType.FULL_AZAN -> {
+                AzanSoundPlayer.playMuezzinPreview(muezzin, volume, prayerType)
+            }
+            AzanAlertType.TAKBEER_ONLY -> {
+                AzanSoundPlayer.playTakbeerAlert(volume)
+            }
+            AzanAlertType.RECITER_VOICE -> {
+                AzanSoundPlayer.playReciterAyahAlert(volume)
+            }
+            AzanAlertType.VIBRATE_ONLY, AzanAlertType.SILENT -> {}
         }
     }
 }

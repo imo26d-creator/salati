@@ -21,10 +21,11 @@ object PrayerTimeCalculator {
         calendar: Calendar,
         latitude: Double = 24.7136, // Default Riyadh / Makkah timezone area
         longitude: Double = 46.6753,
-        timeZoneOffsetHours: Double = (calendar.timeZone.rawOffset + calendar.timeZone.dstSavings).toDouble() / (1000.0 * 3600.0),
+        timeZoneOffsetHours: Double = calendar.timeZone.getOffset(calendar.timeInMillis).toDouble() / (1000.0 * 3600.0),
         method: CalculationMethod = CalculationMethod.UMM_AL_QURA,
         juristicMethod: JuristicMethod = JuristicMethod.STANDARD,
-        manualOffsetMinutes: Map<PrayerType, Int> = emptyMap()
+        manualOffsetMinutes: Map<PrayerType, Int> = emptyMap(),
+        is24HourFormat: Boolean = false
     ): List<PrayerTimeInfo> {
         val year = calendar.get(Calendar.YEAR)
         val month = calendar.get(Calendar.MONTH) + 1
@@ -110,10 +111,22 @@ object PrayerTimeCalculator {
 
             val remaining = if (pMillis > nowMillis) pMillis - nowMillis else 0L
 
+            val formattedTime = if (is24HourFormat) {
+                String.format("%02d:%02d", hours, minutes)
+            } else {
+                val displayH = when {
+                    hours == 0 -> 12
+                    hours > 12 -> hours - 12
+                    else -> hours
+                }
+                val amPm = if (hours < 12) "ص" else "م"
+                String.format("%02d:%02d %s", displayH, minutes, amPm)
+            }
+
             times.add(
                 PrayerTimeInfo(
                     type = type,
-                    timeFormatted = String.format("%02d:%02d", hours, minutes),
+                    timeFormatted = formattedTime,
                     hours = hours,
                     minutes = minutes,
                     timestampMillis = pMillis,

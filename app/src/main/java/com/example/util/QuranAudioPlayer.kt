@@ -21,6 +21,7 @@ object QuranAudioPlayer {
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var mediaPlayer: MediaPlayer? = null
+    private var playJob: Job? = null
     private var progressJob: Job? = null
     private var sleepTimerJob: Job? = null
     private var fallbackAudioTrack: AudioTrack? = null
@@ -58,6 +59,22 @@ object QuranAudioPlayer {
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
+    private fun safeReleasePlayer(mp: MediaPlayer?) {
+        if (mp == null) return
+        try {
+            mp.setOnCompletionListener(null)
+            mp.setOnErrorListener(null)
+            mp.setOnPreparedListener(null)
+            mp.setOnBufferingUpdateListener(null)
+        } catch (_: Exception) {}
+        try {
+            mp.reset()
+        } catch (_: Exception) {}
+        try {
+            mp.release()
+        } catch (_: Exception) {}
+    }
+
     fun setReciter(reciter: QuranReciter) {
         val wasPlaying = _isPlaying.value
         val surah = _currentSurah.value
@@ -73,50 +90,67 @@ object QuranAudioPlayer {
         _isBuffering.value = true
         _errorMessage.value = null
 
-        scope.launch {
-            stopCurrentInternal()
+        playJob?.cancel()
+        stopCurrentInternal()
 
+        playJob = scope.launch {
             val url = QuranDataRepository.getAudioUrl(reciter, surah.number)
             try {
                 withContext(Dispatchers.IO) {
-                    val mp = MediaPlayer().apply {
-                        setAudioAttributes(
-                            AudioAttributes.Builder()
-                                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                                .setUsage(AudioAttributes.USAGE_MEDIA)
-                                .build()
-                        )
-                        setDataSource(url)
-                        setOnPreparedListener { player ->
-                            _isBuffering.value = false
+                    val mp = MediaPlayer()
+                    mediaPlayer = mp
+                    mp.setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                            .setUsage(AudioAttributes.USAGE_MEDIA)
+                            .build()
+                    )
+                    mp.setDataSource(url)
+                    mp.setOnPreparedListener { player ->
+                        _isBuffering.value = false
+                        try {
                             _durationMs.value = player.duration
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                                try {
-                                    player.playbackParams = player.playbackParams.setSpeed(_playbackSpeed.value)
-                                } catch (_: Exception) {}
-                            }
+                        } catch (_: Exception) {}
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            try {
+                                player.playbackParams = player.playbackParams.setSpeed(_playbackSpeed.value)
+                            } catch (_: Exception) {}
+                        }
+                        try {
                             player.start()
                             _isPlaying.value = true
                             startProgressTracking()
-                        }
-                        setOnCompletionListener {
-                            onPlaybackCompleted()
-                        }
-                        setOnErrorListener { _, _, _ ->
-                            _isBuffering.value = false
+                        } catch (_: Exception) {
+                            safeReleasePlayer(player)
+                            if (mediaPlayer == player) {
+                                mediaPlayer = null
+                            }
                             _isPlaying.value = false
-                            _errorMessage.value = "تعذر الاتصال بالخادم الصوتي، جاري تشغيل نغمة بديلة."
-                            playOfflineFallbackTone()
-                            true
                         }
-                        prepareAsync()
                     }
-                    mediaPlayer = mp
+                    mp.setOnCompletionListener {
+                        onPlaybackCompleted()
+                    }
+                    mp.setOnErrorListener { player, _, _ ->
+                        _isBuffering.value = false
+                        _isPlaying.value = false
+                        _errorMessage.value = "تعذر الاتصال بالخادم الصوتي. يرجى التحقق من اتصال الإنترنت."
+                        safeReleasePlayer(player)
+                        if (mediaPlayer == player) {
+                            mediaPlayer = null
+                        }
+                        playOfflineFallbackTone()
+                        true
+                    }
+                    mp.prepareAsync()
                 }
             } catch (e: Exception) {
                 _isBuffering.value = false
                 _isPlaying.value = false
                 _errorMessage.value = "تعذر تشغيل التلاوة: ${e.localizedMessage}"
+                val mp = mediaPlayer
+                mediaPlayer = null
+                safeReleasePlayer(mp)
                 playOfflineFallbackTone()
             }
         }
@@ -125,13 +159,18 @@ object QuranAudioPlayer {
     fun togglePlayPause() {
         val mp = mediaPlayer
         if (mp != null) {
-            if (mp.isPlaying) {
-                mp.pause()
-                _isPlaying.value = false
-            } else {
-                mp.start()
-                _isPlaying.value = true
-                startProgressTracking()
+            try {
+                if (mp.isPlaying) {
+                    mp.pause()
+                    _isPlaying.value = false
+                } else {
+                    mp.start()
+                    _isPlaying.value = true
+                    startProgressTracking()
+                }
+            } catch (_: Exception) {
+                val surah = _currentSurah.value ?: QuranDataRepository.surahsList.first()
+                playSurah(surah, _currentReciter.value)
             }
         } else {
             val surah = _currentSurah.value ?: QuranDataRepository.surahsList.first()
@@ -141,20 +180,24 @@ object QuranAudioPlayer {
 
     fun pause() {
         mediaPlayer?.let {
-            if (it.isPlaying) {
-                it.pause()
-                _isPlaying.value = false
-            }
+            try {
+                if (it.isPlaying) {
+                    it.pause()
+                }
+            } catch (_: Exception) {}
+            _isPlaying.value = false
         }
     }
 
     fun resume() {
         mediaPlayer?.let {
-            if (!it.isPlaying) {
-                it.start()
-                _isPlaying.value = true
-                startProgressTracking()
-            }
+            try {
+                if (!it.isPlaying) {
+                    it.start()
+                    _isPlaying.value = true
+                    startProgressTracking()
+                }
+            } catch (_: Exception) {}
         }
     }
 
@@ -242,15 +285,9 @@ object QuranAudioPlayer {
         }
         fallbackAudioTrack = null
 
-        mediaPlayer?.let { mp ->
-            try {
-                if (mp.isPlaying) {
-                    mp.stop()
-                }
-                mp.release()
-            } catch (_: Exception) {}
-        }
+        val mp = mediaPlayer
         mediaPlayer = null
+        safeReleasePlayer(mp)
     }
 
     private fun startProgressTracking() {
@@ -286,43 +323,8 @@ object QuranAudioPlayer {
     }
 
     private fun playOfflineFallbackTone() {
-        scope.launch(Dispatchers.Default) {
-            try {
-                val sampleRate = 44100
-                val durationSec = 3.0
-                val totalSamples = (sampleRate * durationSec).toInt()
-                val buffer = ShortArray(totalSamples)
-
-                val freqs = doubleArrayOf(432.0, 528.0, 648.0)
-                for (i in 0 until totalSamples) {
-                    val t = i.toDouble() / sampleRate
-                    var s = 0.0
-                    for (f in freqs) {
-                        s += sin(2.0 * PI * f * t)
-                    }
-                    s /= freqs.size
-                    val envelope = sin(PI * (i.toDouble() / totalSamples))
-                    buffer[i] = (s * envelope * 12000).toInt().toShort()
-                }
-
-                val minBuf = AudioTrack.getMinBufferSize(
-                    sampleRate,
-                    AudioFormat.CHANNEL_OUT_MONO,
-                    AudioFormat.ENCODING_PCM_16BIT
-                )
-                val track = AudioTrack(
-                    AudioManager.STREAM_MUSIC,
-                    sampleRate,
-                    AudioFormat.CHANNEL_OUT_MONO,
-                    AudioFormat.ENCODING_PCM_16BIT,
-                    maxOf(minBuf, buffer.size * 2),
-                    AudioTrack.MODE_STREAM
-                )
-                fallbackAudioTrack = track
-                track.play()
-                track.write(buffer, 0, buffer.size)
-            } catch (_: Exception) {}
-        }
+        // No musical chords. Silent fallback and user error display.
+        _errorMessage.value = "تعذر تشغيل التلاوة الصوتية. يرجى التحقق من الاتصال بالإنترنت."
     }
 
     fun formatTime(millis: Int): String {

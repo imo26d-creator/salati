@@ -75,7 +75,7 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
         val content = when (alertType) {
             AzanAlertType.FULL_AZAN -> "حي على الصلاة، حي على الفلاح • أذان بصوت ${muezzin.titleArabic}"
             AzanAlertType.TAKBEER_ONLY -> "الله أكبر، الله أكبر • تكبيرات الأذان بصوت ${muezzin.titleArabic}"
-            AzanAlertType.CHIME -> "حان موعد صلاة ${prayerType.arabicName} • بارك الله في أوقاتكم"
+            AzanAlertType.RECITER_VOICE -> "تلاوة قرآنية خاشعة • حان موعد صلاة ${prayerType.arabicName}"
             AzanAlertType.VIBRATE_ONLY -> "حان موعد صلاة ${prayerType.arabicName} (تنبيه بالاهتزاز)"
             AzanAlertType.SILENT -> "حان موعد صلاة ${prayerType.arabicName} (إشعار صامت)"
         }
@@ -101,13 +101,16 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
             notificationManager.notify(prayerType.ordinal + 1000, notification)
         } catch (_: SecurityException) {}
 
-        // Handle Audio and Vibration
+        // Handle Audio and Vibration (Strictly free from any musical instruments)
         when (alertType) {
-            AzanAlertType.FULL_AZAN, AzanAlertType.TAKBEER_ONLY -> {
+            AzanAlertType.FULL_AZAN -> {
                 AzanSoundPlayer.playMuezzinPreview(muezzin, volume, prayerType)
             }
-            AzanAlertType.CHIME -> {
-                AzanSoundPlayer.playAlertChime(isFullAzanTone = true, volume = volume)
+            AzanAlertType.TAKBEER_ONLY -> {
+                AzanSoundPlayer.playTakbeerAlert(volume)
+            }
+            AzanAlertType.RECITER_VOICE -> {
+                AzanSoundPlayer.playReciterAyahAlert(volume)
             }
             AzanAlertType.VIBRATE_ONLY -> {
                 triggerVibration(context)
@@ -139,7 +142,7 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
         )
 
         val title = "⏳ اقتراب وقت صلاة ${prayerType.arabicName}"
-        val content = "بقي قرابة $preMinutes دقائق على موعد أذان ${prayerType.arabicName}. استعد للوضوء وإدراك تكبيرة الإحرام."
+        val content = "بقي قرابة $preMinutes دقائق على موعد أذان ${prayerType.arabicName} • استعد للوضوء وإدراك تكبيرة الإحرام"
 
         val notification = NotificationCompat.Builder(context, PrayerNotificationScheduler.CHANNEL_PRE_PRAYER_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
@@ -157,7 +160,8 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
             notificationManager.notify(prayerType.ordinal + 2000, notification)
         } catch (_: SecurityException) {}
 
-        AzanSoundPlayer.playAlertChime(isFullAzanTone = false, volume = volume)
+        // Play Takbeer alert for pre-prayer alert (No music)
+        AzanSoundPlayer.playTakbeerAlert(volume = volume)
     }
 
     private fun triggerVibration(context: Context) {

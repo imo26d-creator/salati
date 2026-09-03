@@ -146,43 +146,49 @@ enum class MuezzinVoice(
         titleArabic = "أذان الحرم المكي (الشيخ علي ملا)",
         descriptionArabic = "المقام الحجازي التراثي العريق والمهيب",
         location = "مكة المكرمة",
-        audioUrl = "https://download.quranicaudio.com/adhan/makkah.mp3"
+        audioUrl = ""
     ),
     MADINAH(
         titleArabic = "أذان المسجد النبوي (الشيخ عصام بخاري)",
         descriptionArabic = "أذان السكينة والخشوع والوقار المدني",
         location = "المدينة المنورة",
-        audioUrl = "https://download.quranicaudio.com/adhan/madinah.mp3"
+        audioUrl = ""
     ),
     AL_AQSA(
         titleArabic = "أذان المسجد الأقصى المبارك",
         descriptionArabic = "نبرة مقدسية شجية وصوت يفيض بالإيمان",
         location = "القدس الشريف",
-        audioUrl = "https://download.quranicaudio.com/adhan/alaqsa.mp3"
+        audioUrl = ""
     ),
     MISHARY(
         titleArabic = "أذان الشيخ مشاري راشد العفاسي",
         descriptionArabic = "صوت ندي خاشع ونبرة عذبة تأسر القلوب",
         location = "الكويت",
-        audioUrl = "https://download.quranicaudio.com/adhan/mishari.mp3"
+        audioUrl = ""
     ),
     ABDULBASIT(
         titleArabic = "أذان الشيخ عبد الباسط عبد الصمد",
         descriptionArabic = "صوت نقي وأداء تاريخي من أروع ما سُمع",
         location = "مصر",
-        audioUrl = "https://download.quranicaudio.com/adhan/abdulbasit.mp3"
+        audioUrl = ""
     ),
     QATAMI(
         titleArabic = "أذان الشيخ ناصر القطامي",
         descriptionArabic = "نبرة مؤثرة وروحانية تأخذك إلى آفاق الخشوع",
         location = "الرياض",
-        audioUrl = "https://download.quranicaudio.com/adhan/qatami.mp3"
-    ),
-    TAKBEER_CHIME(
-        titleArabic = "تكبيرات ونغمة سكينة هادئة",
-        descriptionArabic = "تنبيه لطيف وهادئ مناسب للأماكن العامة والعمل",
-        location = "نغمة ناعمة",
         audioUrl = ""
+    ),
+    TAKBEERAT(
+        titleArabic = "تكبيرات الأذان الشرعية (الله أكبر)",
+        descriptionArabic = "تكبيرات بصوت خاشع ومؤثر خالٍ تماماً من أي موسيقى",
+        location = "تسجيل شرعي",
+        audioUrl = ""
+    ),
+    RECITER_AYAH(
+        titleArabic = "تلاوة قرآنية مباركة (الشيخ مشاري)",
+        descriptionArabic = "قراءة آيات بينات من القرآن الكريم بصوت عذب خاشع",
+        location = "تلاوة خاشعة",
+        audioUrl = "https://server8.mp3quran.net/afs/001.mp3"
     );
 
     val arabicName: String get() = titleArabic
@@ -193,9 +199,9 @@ enum class AzanAlertType(
     val descriptionArabic: String
 ) {
     FULL_AZAN("أذان كامل", "رفع الأذان كاملاً بصوت المؤذن المختار"),
-    TAKBEER_ONLY("تكبيرات فقط", "رفع التكبيرات الأولى فقط لتنبيه سريع"),
-    CHIME("نغمة سكينة هادئة", "نغمة وترية لطيفة وخافتة"),
-    VIBRATE_ONLY("اهتزاز فقط", "تنبيه بالاهتزاز بدون صوت"),
+    TAKBEER_ONLY("تكبيرات فقط", "رفع تكبيرات: الله أكبر، الله أكبر بصوت خاشع"),
+    RECITER_VOICE("صوت مقرئ (تلاوة)", "تلاوة آيات عطرة لتنبيه دخول الوقت دون أي موسيقى"),
+    VIBRATE_ONLY("اهتزاز فقط", "تنبيه بالاهتزاز الخاشع دون صوت"),
     SILENT("صامت", "إشعار مرئي على الشاشة فقط")
 }
 

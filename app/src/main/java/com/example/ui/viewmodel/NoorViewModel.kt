@@ -99,9 +99,9 @@ data class NoorUiState(
         PrayerType.SUNRISE to PrayerAzanConfig(
             prayerType = PrayerType.SUNRISE,
             isEnabled = true,
-            muezzin = MuezzinVoice.TAKBEER_CHIME,
-            volume = 0.50f,
-            alertType = AzanAlertType.CHIME
+            muezzin = MuezzinVoice.TAKBEERAT,
+            volume = 0.65f,
+            alertType = AzanAlertType.TAKBEER_ONLY
         ),
         PrayerType.DHUHR to PrayerAzanConfig(
             prayerType = PrayerType.DHUHR,
@@ -131,7 +131,13 @@ data class NoorUiState(
             volume = 0.85f,
             alertType = AzanAlertType.FULL_AZAN
         )
-    )
+    ),
+    val isAutoPhoneTime: Boolean = true,
+    val is24HourFormat: Boolean = false,
+    val deviceCurrentTimeFormatted: String = "",
+    val deviceTimeZoneName: String = "",
+    val prayerManualOffsets: Map<PrayerType, Int> = emptyMap(),
+    val timeSyncSuccessMessage: String? = null
 )
 
 class NoorViewModel(application: Application) : AndroidViewModel(application) {
@@ -249,8 +255,28 @@ class NoorViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun startLiveTimer() {
         viewModelScope.launch {
+            val timeFormat12 = SimpleDateFormat("hh:mm:ss a", Locale("ar"))
+            val timeFormat24 = SimpleDateFormat("HH:mm:ss", Locale.US)
             while (isActive) {
                 val now = Calendar.getInstance()
+                val tz = TimeZone.getDefault()
+                val offsetHours = tz.getOffset(now.timeInMillis) / 3600000
+                val sign = if (offsetHours >= 0) "+" else ""
+                val tzFormatted = "GMT$sign$offsetHours (${tz.displayName})"
+
+                val formattedTime = if (_uiState.value.is24HourFormat) {
+                    timeFormat24.format(now.time)
+                } else {
+                    timeFormat12.format(now.time)
+                }
+
+                _uiState.update {
+                    it.copy(
+                        deviceCurrentTimeFormatted = formattedTime,
+                        deviceTimeZoneName = tzFormatted
+                    )
+                }
+
                 updateAtmosphereAndGreeting(now)
                 updateCountdown(now)
                 delay(1000)
@@ -265,7 +291,9 @@ class NoorViewModel(application: Application) : AndroidViewModel(application) {
             latitude = _uiState.value.latitude,
             longitude = _uiState.value.longitude,
             method = _uiState.value.calculationMethod,
-            juristicMethod = _uiState.value.juristicMethod
+            juristicMethod = _uiState.value.juristicMethod,
+            manualOffsetMinutes = _uiState.value.prayerManualOffsets,
+            is24HourFormat = _uiState.value.is24HourFormat
         )
 
         val nextP = todayTimes.find { it.isNext } ?: todayTimes.firstOrNull { it.type == PrayerType.FAJR }
@@ -275,7 +303,9 @@ class NoorViewModel(application: Application) : AndroidViewModel(application) {
             latitude = _uiState.value.latitude,
             longitude = _uiState.value.longitude,
             method = _uiState.value.calculationMethod,
-            juristicMethod = _uiState.value.juristicMethod
+            juristicMethod = _uiState.value.juristicMethod,
+            manualOffsetMinutes = _uiState.value.prayerManualOffsets,
+            is24HourFormat = _uiState.value.is24HourFormat
         )
 
         _uiState.update {
@@ -651,8 +681,68 @@ class NoorViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(isARModeActive = !it.isARModeActive) }
     }
 
+    fun playPreviewTakbeerAlert() {
+        AzanSoundPlayer.playTakbeerAlert(_uiState.value.azanVolume)
+    }
+
+    fun playPreviewReciterAlert() {
+        AzanSoundPlayer.playReciterAyahAlert(_uiState.value.azanVolume)
+    }
+
     fun playPreviewChime(isFull: Boolean = false) {
-        AzanSoundPlayer.playAlertChime(isFull, _uiState.value.azanVolume)
+        playPreviewTakbeerAlert()
+    }
+
+    fun toggleAutoPhoneTime(enabled: Boolean) {
+        _uiState.update { it.copy(isAutoPhoneTime = enabled) }
+        if (enabled) {
+            syncWithDeviceTimeNow()
+        }
+    }
+
+    fun syncWithDeviceTimeNow() {
+        val nowCal = Calendar.getInstance()
+        val tz = TimeZone.getDefault()
+        val offsetHours = tz.getOffset(nowCal.timeInMillis) / 3600000
+        val sign = if (offsetHours >= 0) "+" else ""
+        val tzFormatted = "GMT$sign$offsetHours (${tz.displayName})"
+        val hijri = HijriCalendarHelper.getHijriDate(nowCal)
+
+        _uiState.update {
+            it.copy(
+                selectedDate = nowCal,
+                gregorianDateFormatted = displayDateFormat.format(nowCal.time),
+                hijriDate = hijri,
+                deviceTimeZoneName = tzFormatted,
+                timeSyncSuccessMessage = "تمت مزامنة الوقت والتوقيت مع ساعة هاتفك بنجاح ⏱️"
+            )
+        }
+        recalculatePrayerTimes()
+        viewModelScope.launch {
+            delay(3500)
+            _uiState.update { it.copy(timeSyncSuccessMessage = null) }
+        }
+    }
+
+    fun toggle24HourFormat(is24Hour: Boolean) {
+        _uiState.update { it.copy(is24HourFormat = is24Hour) }
+        recalculatePrayerTimes()
+    }
+
+    fun setPrayerManualOffset(prayerType: PrayerType, offsetMinutes: Int) {
+        val current = _uiState.value.prayerManualOffsets.toMutableMap()
+        current[prayerType] = offsetMinutes.coerceIn(-30, 30)
+        _uiState.update { it.copy(prayerManualOffsets = current) }
+        recalculatePrayerTimes()
+    }
+
+    fun resetPrayerManualOffsets() {
+        _uiState.update { it.copy(prayerManualOffsets = emptyMap()) }
+        recalculatePrayerTimes()
+    }
+
+    fun clearTimeSyncMessage() {
+        _uiState.update { it.copy(timeSyncSuccessMessage = null) }
     }
 
     fun setSelectedMuezzin(muezzin: MuezzinVoice) {

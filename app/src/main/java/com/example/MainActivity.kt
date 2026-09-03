@@ -261,7 +261,14 @@ class MainActivity : ComponentActivity() {
                         },
                         onSendTestNotification = { prayer ->
                             viewModel.sendTestPrayerNotification(prayer)
-                        }
+                        },
+                        onToggleAutoPhoneTime = { viewModel.toggleAutoPhoneTime(it) },
+                        onSyncWithPhoneNow = { viewModel.syncWithDeviceTimeNow() },
+                        onToggle24HourFormat = { viewModel.toggle24HourFormat(it) },
+                        onSetPrayerManualOffset = { prayer, offset ->
+                            viewModel.setPrayerManualOffset(prayer, offset)
+                        },
+                        onResetPrayerManualOffsets = { viewModel.resetPrayerManualOffsets() }
                     )
                 }
 
@@ -279,7 +286,14 @@ class MainActivity : ComponentActivity() {
                         onSelectMuezzin = { viewModel.setSelectedMuezzin(it) },
                         onVolumeChange = { viewModel.setAzanVolume(it) },
                         onToggleMuezzinPreview = { viewModel.toggleMuezzinPreview(it) },
-                        onPlayToneTest = { viewModel.playPreviewChime(false) },
+                        onPlayToneTest = { viewModel.playPreviewTakbeerAlert() },
+                        onToggleAutoPhoneTime = { viewModel.toggleAutoPhoneTime(it) },
+                        onSyncWithPhoneNow = { viewModel.syncWithDeviceTimeNow() },
+                        onToggle24HourFormat = { viewModel.toggle24HourFormat(it) },
+                        onSetPrayerManualOffset = { prayer, offset ->
+                            viewModel.setPrayerManualOffset(prayer, offset)
+                        },
+                        onResetPrayerManualOffsets = { viewModel.resetPrayerManualOffsets() },
                         onDismiss = { showSettingsDialog = false }
                     )
                 }

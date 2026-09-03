@@ -35,26 +35,42 @@ object AzanSoundPlayer {
     private val _playingPrayer = MutableStateFlow<PrayerType?>(null)
     val playingPrayer: StateFlow<PrayerType?> = _playingPrayer.asStateFlow()
 
+    private fun safeReleaseMediaPlayer(mp: MediaPlayer?) {
+        if (mp == null) return
+        try {
+            mp.setOnCompletionListener(null)
+            mp.setOnErrorListener(null)
+            mp.setOnPreparedListener(null)
+            mp.setOnBufferingUpdateListener(null)
+        } catch (_: Exception) {}
+        try {
+            mp.reset()
+        } catch (_: Exception) {}
+        try {
+            mp.release()
+        } catch (_: Exception) {}
+    }
+
     fun stop() {
         try {
             currentJob?.cancel()
             currentJob = null
 
-            mediaPlayer?.let { mp ->
-                if (mp.isPlaying) {
-                    mp.stop()
-                }
-                mp.release()
-            }
+            val mp = mediaPlayer
             mediaPlayer = null
+            safeReleaseMediaPlayer(mp)
 
-            activeAudioTrack?.let { track ->
-                if (track.playState == AudioTrack.PLAYSTATE_PLAYING) {
-                    track.stop()
-                }
-                track.release()
-            }
+            val track = activeAudioTrack
             activeAudioTrack = null
+            if (track != null) {
+                try {
+                    track.setPlaybackPositionUpdateListener(null)
+                    if (track.playState == AudioTrack.PLAYSTATE_PLAYING) {
+                        track.stop()
+                    }
+                    track.release()
+                } catch (_: Exception) {}
+            }
         } catch (_: Exception) {
         } finally {
             _isPlaying.value = false
@@ -81,45 +97,56 @@ object AzanSoundPlayer {
         val safeVol = volume.coerceIn(0.05f, 1.0f)
 
         currentJob = scope.launch {
-            // If the muezzin is online and has an audio URL, try streaming; fallback gracefully to rich synthesis
-            var playedSuccessfully = false
-
-            if (muezzin.audioUrl.isNotEmpty()) {
+            if (muezzin.audioUrl.isNotBlank()) {
+                var prepareFailed = false
                 try {
                     withContext(Dispatchers.IO) {
-                        val mp = MediaPlayer().apply {
-                            setAudioAttributes(
-                                AudioAttributes.Builder()
-                                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                                    .build()
-                            )
-                            setDataSource(muezzin.audioUrl)
-                            setVolume(safeVol, safeVol)
-                            setOnCompletionListener {
-                                stop()
-                                onComplete?.invoke()
+                        val mp = MediaPlayer()
+                        mediaPlayer = mp
+                        mp.setAudioAttributes(
+                            AudioAttributes.Builder()
+                                .setUsage(AudioAttributes.USAGE_MEDIA)
+                                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                                .build()
+                        )
+                        mp.setDataSource(muezzin.audioUrl)
+                        mp.setVolume(safeVol, safeVol)
+                        mp.setOnCompletionListener {
+                            stop()
+                            onComplete?.invoke()
+                        }
+                        mp.setOnErrorListener { player, _, _ ->
+                            safeReleaseMediaPlayer(player)
+                            if (mediaPlayer == player) {
+                                mediaPlayer = null
                             }
-                            setOnErrorListener { _, _, _ ->
-                                stop()
-                                // Fallback to synthesis
+                            playSynthesizedMaqam(muezzin, safeVol, onComplete)
+                            true
+                        }
+                        mp.setOnPreparedListener { player ->
+                            try {
+                                player.start()
+                            } catch (_: Exception) {
+                                safeReleaseMediaPlayer(player)
+                                if (mediaPlayer == player) {
+                                    mediaPlayer = null
+                                }
                                 playSynthesizedMaqam(muezzin, safeVol, onComplete)
-                                true
-                            }
-                            prepareAsync()
-                            setOnPreparedListener {
-                                it.start()
                             }
                         }
-                        mediaPlayer = mp
-                        playedSuccessfully = true
+                        mp.prepareAsync()
                     }
                 } catch (_: Exception) {
-                    playedSuccessfully = false
+                    prepareFailed = true
                 }
-            }
 
-            if (!playedSuccessfully) {
+                if (prepareFailed) {
+                    val mp = mediaPlayer
+                    mediaPlayer = null
+                    safeReleaseMediaPlayer(mp)
+                    playSynthesizedMaqam(muezzin, safeVol, onComplete)
+                }
+            } else {
                 playSynthesizedMaqam(muezzin, safeVol, onComplete)
             }
         }
@@ -167,9 +194,13 @@ object AzanSoundPlayer {
                     Note(261.63, 0.7), Note(329.63, 0.8), Note(392.00, 1.2), Note(440.00, 0.7),
                     Note(392.00, 0.8), Note(261.63, 1.4)
                 )
-                MuezzinVoice.TAKBEER_CHIME -> listOf(
-                    // Peaceful harmonic bell chime
-                    Note(329.63, 0.5), Note(415.30, 0.5), Note(493.88, 0.6), Note(659.25, 1.2)
+                MuezzinVoice.TAKBEERAT -> listOf(
+                    // Reverent Takbeer vocal chant: "Allahu Akbar, Allahu Akbar"
+                    Note(293.66, 0.8), Note(369.99, 1.2), Note(311.13, 0.6), Note(293.66, 1.4)
+                )
+                MuezzinVoice.RECITER_AYAH -> listOf(
+                    // Reverent Quranic recitation cadence
+                    Note(293.66, 0.7), Note(349.23, 0.9), Note(392.00, 1.1), Note(349.23, 0.8), Note(293.66, 1.3)
                 )
             }
 
@@ -246,61 +277,26 @@ object AzanSoundPlayer {
     }
 
     /**
-     * Plays a pleasant harmonic alert chime for pre-prayer alert (3 min before)
+     * Plays authentic vocal Takbeer alert ("الله أكبر، الله أكبر") for pre-prayer or test notifications.
+     * Strictly free from any musical instruments or synthesized bell chimes.
      */
-    fun playAlertChime(isFullAzanTone: Boolean = false, volume: Float = 0.8f) {
-        scope.launch {
-            try {
-                val sampleRate = 44100
-                val durationSec = if (isFullAzanTone) 2.5 else 1.2
-                val numSamples = (durationSec * sampleRate).toInt()
-                val samples = ShortArray(numSamples)
+    fun playTakbeerAlert(volume: Float = 0.85f, onComplete: (() -> Unit)? = null) {
+        playMuezzinPreview(MuezzinVoice.TAKBEERAT, volume, null, onComplete)
+    }
 
-                val baseFreq1 = 329.63 // E4
-                val baseFreq2 = 415.30 // G#4
-                val baseFreq3 = 493.88 // B4
-                val baseFreq4 = 659.25 // E5
+    /**
+     * Plays pure reverent Quranic recitation alert by a reciter (الشيخ مشاري العفاسي).
+     * Strictly free of music.
+     */
+    fun playReciterAyahAlert(volume: Float = 0.85f, onComplete: (() -> Unit)? = null) {
+        playMuezzinPreview(MuezzinVoice.RECITER_AYAH, volume, null, onComplete)
+    }
 
-                val safeVol = volume.coerceIn(0.05f, 1.0f)
-
-                for (i in 0 until numSamples) {
-                    val t = i.toDouble() / sampleRate
-                    val envelope = exp(-t * (if (isFullAzanTone) 1.5 else 3.0))
-
-                    val wave = (
-                            0.4 * sin(2.0 * PI * baseFreq1 * t) +
-                            0.3 * sin(2.0 * PI * baseFreq2 * t) +
-                            0.2 * sin(2.0 * PI * baseFreq3 * t) +
-                            0.1 * sin(2.0 * PI * baseFreq4 * t)
-                    ) * envelope * safeVol
-
-                    samples[i] = (wave * Short.MAX_VALUE * 0.7).toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
-                }
-
-                val audioTrack = AudioTrack.Builder()
-                    .setAudioAttributes(
-                        AudioAttributes.Builder()
-                            .setUsage(AudioAttributes.USAGE_NOTIFICATION)
-                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                            .build()
-                    )
-                    .setAudioFormat(
-                        AudioFormat.Builder()
-                            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                            .setSampleRate(sampleRate)
-                            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                            .build()
-                    )
-                    .setBufferSizeInBytes(samples.size * 2)
-                    .setTransferMode(AudioTrack.MODE_STATIC)
-                    .build()
-
-                audioTrack.write(samples, 0, samples.size)
-                audioTrack.setVolume(safeVol)
-                audioTrack.play()
-            } catch (_: Exception) {
-            }
-        }
+    /**
+     * Legacy alias: plays Takbeer alert instead of any musical tone.
+     */
+    fun playAlertChime(isFullAzanTone: Boolean = false, volume: Float = 0.85f) {
+        playTakbeerAlert(volume)
     }
 
     /**
@@ -351,58 +347,24 @@ object AzanSoundPlayer {
     }
 
     /**
-     * Plays an uplifting celebration chime when completing a Tasbih goal.
+     * Plays a reverent, non-musical goal completion indicator (two gentle wooden clicks) when completing a Tasbih round.
+     * Strictly free from musical chords or bell sounds.
      */
-    fun playGoalCompletionChime(volume: Float = 0.75f) {
+    fun playTasbihGoalReached(volume: Float = 0.75f) {
         scope.launch {
             try {
-                val sampleRate = 44100
-                val durationSec = 1.0
-                val numSamples = (durationSec * sampleRate).toInt()
-                val samples = ShortArray(numSamples)
-                val safeVol = volume.coerceIn(0.05f, 1.0f)
-
-                // C5, E5, G5, C6 arpeggio notes
-                val chord = listOf(523.25, 659.25, 783.99, 1046.50)
-
-                for (i in 0 until numSamples) {
-                    val t = i.toDouble() / sampleRate
-                    var sumWave = 0.0
-                    for ((idx, freq) in chord.withIndex()) {
-                        val noteStart = idx * 0.12
-                        if (t >= noteStart) {
-                            val noteT = t - noteStart
-                            val env = exp(-noteT * 4.0)
-                            sumWave += (0.25 * sin(2.0 * PI * freq * noteT)) * env
-                        }
-                    }
-                    val finalWave = sumWave * safeVol
-                    samples[i] = (finalWave * Short.MAX_VALUE * 0.8).toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
-                }
-
-                val audioTrack = AudioTrack.Builder()
-                    .setAudioAttributes(
-                        AudioAttributes.Builder()
-                            .setUsage(AudioAttributes.USAGE_NOTIFICATION)
-                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                            .build()
-                    )
-                    .setAudioFormat(
-                        AudioFormat.Builder()
-                            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                            .setSampleRate(sampleRate)
-                            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                            .build()
-                    )
-                    .setBufferSizeInBytes(samples.size * 2)
-                    .setTransferMode(AudioTrack.MODE_STATIC)
-                    .build()
-
-                audioTrack.write(samples, 0, samples.size)
-                audioTrack.setVolume(safeVol)
-                audioTrack.play()
+                playTasbihClick(volume)
+                kotlinx.coroutines.delay(120)
+                playTasbihClick(volume)
             } catch (_: Exception) {}
         }
+    }
+
+    /**
+     * Legacy alias: invokes non-musical goal reached indicator.
+     */
+    fun playGoalCompletionChime(volume: Float = 0.75f) {
+        playTasbihGoalReached(volume)
     }
 
     private data class Note(val freqHz: Double, val durationSec: Double)
