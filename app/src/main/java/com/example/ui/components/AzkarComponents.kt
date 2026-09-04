@@ -96,10 +96,12 @@ fun AzkarCategoryTile(
 fun InteractiveAzkarReader(
     dhikrList: List<DhikrItem>,
     onClose: () -> Unit,
+    onCompleteSession: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var currentIndex by remember { mutableStateOf(0) }
     var currentCount by remember { mutableStateOf(0) }
+    var sessionCompletedTriggered by remember { mutableStateOf(false) }
 
     val currentDhikr = dhikrList.getOrNull(currentIndex) ?: return
     val context = LocalContext.current
@@ -160,6 +162,10 @@ fun InteractiveAzkarReader(
                             currentCount = 0
                         } else {
                             currentCount = currentDhikr.targetCount
+                            if (!sessionCompletedTriggered) {
+                                sessionCompletedTriggered = true
+                                onCompleteSession?.invoke()
+                            }
                         }
                     } else {
                         currentCount++

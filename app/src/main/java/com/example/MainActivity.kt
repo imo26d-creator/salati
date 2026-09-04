@@ -1,6 +1,7 @@
 package com.example
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.Geocoder
 import android.location.Location
@@ -37,6 +38,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import com.example.data.model.DhikrCategory
+import com.example.data.model.PrayerType
 import com.example.ui.components.*
 import com.example.ui.screens.*
 import com.example.ui.theme.*
@@ -64,13 +67,31 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.example.util.AzanSoundPlayer.init(this)
         enableEdgeToEdge()
+
+        val openTabExtra = intent?.getStringExtra("open_tab")
+        val initialCategoryExtra = intent?.getStringExtra("azkar_category")?.let {
+            try { DhikrCategory.valueOf(it) } catch (_: Exception) { null }
+        }
+        if (initialCategoryExtra != null) {
+            viewModel.setTargetOpenAzkarCategory(initialCategoryExtra)
+        }
 
         setContent {
             NoorTheme {
                 val uiState by viewModel.uiState.collectAsState()
                 val currentAzimuth by viewModel.compassManager.azimuth.collectAsState()
-                var currentTab by remember { mutableStateOf(NoorNavTab.HOME) }
+                var currentTab by remember {
+                    mutableStateOf(if (openTabExtra == "azkar" || initialCategoryExtra != null) NoorNavTab.AZKAR else NoorNavTab.HOME)
+                }
+
+                LaunchedEffect(uiState.targetOpenAzkarCategory) {
+                    if (uiState.targetOpenAzkarCategory != null) {
+                        currentTab = NoorNavTab.AZKAR
+                    }
+                }
+
                 var showWidgetsDialog by remember { mutableStateOf(false) }
                 var showSettingsDialog by remember { mutableStateOf(false) }
                 var showMuezzinDialog by remember { mutableStateOf(false) }
@@ -159,7 +180,9 @@ class MainActivity : ComponentActivity() {
                                     onShowWidgetsPreview = { showWidgetsDialog = true },
                                     onChecklistToggle = { viewModel.toggleChecklist(it) },
                                     onIncrementDhikr = { viewModel.incrementTasbih() },
-                                    onOpenSettings = { showSettingsDialog = true }
+                                    onOpenSettings = { showSettingsDialog = true },
+                                    onToggleListenAdhanEarly = { viewModel.toggleEarlyAdhanListening(it) },
+                                    onSetPreAlertMinutes = { viewModel.setPrePrayerAlertMinutes(it) }
                                 )
 
                                  NoorNavTab.PRAYERS -> PrayersScreen(
@@ -168,7 +191,8 @@ class MainActivity : ComponentActivity() {
                                     onLogStatus = { type, status -> viewModel.logPrayerStatus(type, status) },
                                     onToggleAzan = { viewModel.togglePerPrayerAzan(it) },
                                     onOpenSettings = { showSettingsDialog = true },
-                                    onOpenMuezzinSelection = { showPrayerAzanSettingsScreen = true }
+                                    onOpenMuezzinSelection = { showPrayerAzanSettingsScreen = true },
+                                    onToggleListenAdhanEarly = { viewModel.toggleEarlyAdhanListening(it) }
                                 )
 
                                 NoorNavTab.QIBLA -> QiblaScreen(
@@ -202,7 +226,22 @@ class MainActivity : ComponentActivity() {
                                     onAddCustomDhikr = { ar, target, virtue -> viewModel.addCustomDhikr(ar, target, virtue) },
                                     onDeleteCustomDhikr = { viewModel.deleteCustomDhikr(it) },
                                     onDismissTasbihCelebration = { viewModel.dismissTasbihCelebration() },
-                                    onSelectTasbihDhikr = { name, target -> viewModel.selectDhikr(name, target) }
+                                    onSelectTasbihDhikr = { name, target -> viewModel.selectDhikr(name, target) },
+                                    onSaveMorningAzkarNotification = { enabled, h, m ->
+                                        viewModel.setMorningAzkarNotification(enabled, h, m)
+                                    },
+                                    onSaveEveningAzkarNotification = { enabled, h, m ->
+                                        viewModel.setEveningAzkarNotification(enabled, h, m)
+                                    },
+                                    onSendTestAzkarNotification = { isMorning ->
+                                        viewModel.sendTestAzkarNotification(isMorning)
+                                    },
+                                    onRecordAzkarCompleted = { category ->
+                                        viewModel.recordAzkarCompleted(category)
+                                    },
+                                    onClearAzkarFeedback = {
+                                        viewModel.clearAzkarFeedback()
+                                    }
                                 )
 
                                 NoorNavTab.MORE -> MoreScreen(
@@ -220,9 +259,39 @@ class MainActivity : ComponentActivity() {
                                     onVolumeChange = { viewModel.setAzanVolume(it) },
                                     onToggleMuezzinPreview = { viewModel.toggleMuezzinPreview(it) },
                                     onPlayToneTest = { viewModel.playPreviewChime(false) },
-                                    onOpenPrayerAzanSettings = { showPrayerAzanSettingsScreen = true }
+                                    onOpenPrayerAzanSettings = { showPrayerAzanSettingsScreen = true },
+                                    onToggleAutoPhoneTime = { viewModel.toggleAutoPhoneTime(it) },
+                                    onSyncWithPhoneNow = { viewModel.syncWithDeviceTimeNow() },
+                                    onToggle24HourFormat = { viewModel.toggle24HourFormat(it) },
+                                    onSetPrayerManualOffset = { prayer, offset ->
+                                        viewModel.setPrayerManualOffset(prayer, offset)
+                                    },
+                                    onResetPrayerManualOffsets = { viewModel.resetPrayerManualOffsets() },
+                                    onAdjustManualTimeMinutes = { viewModel.adjustManualTimeBy(it) },
+                                    onSetManualTimeOffset = { viewModel.setManualTimeOffsetMinutes(it) },
+                                    onSetSpecificCustomTime = { h, m -> viewModel.setSpecificCustomTime(h, m) },
+                                    onSetHijriDateAdjustment = { viewModel.setHijriDateAdjustment(it) },
+                                    onSelectCustomDate = { viewModel.setSelectedDate(it) },
+                                    onSetSpecificCustomDate = { y, m, d -> viewModel.setSpecificCustomDate(y, m, d) },
+                                    onResetDateToToday = { viewModel.resetDateToToday() },
+                                    onResetAllTimeAndDateSettings = { viewModel.resetAllTimeAndDateSettings() }
                                 )
                             }
+                        }
+
+                        // Floating Mini Adhan Player when audio is actively playing
+                        androidx.compose.animation.AnimatedVisibility(
+                            visible = uiState.isAzanAudioPlaying,
+                            enter = androidx.compose.animation.slideInVertically { it } + androidx.compose.animation.fadeIn(),
+                            exit = androidx.compose.animation.slideOutVertically { it } + androidx.compose.animation.fadeOut(),
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                        ) {
+                            FloatingAdhanPlayerBar(
+                                uiState = uiState,
+                                onStop = { viewModel.stopMuezzinPreview() }
+                            )
                         }
                     }
                 }
@@ -294,6 +363,14 @@ class MainActivity : ComponentActivity() {
                             viewModel.setPrayerManualOffset(prayer, offset)
                         },
                         onResetPrayerManualOffsets = { viewModel.resetPrayerManualOffsets() },
+                        onAdjustManualTimeMinutes = { viewModel.adjustManualTimeBy(it) },
+                        onSetManualTimeOffset = { viewModel.setManualTimeOffsetMinutes(it) },
+                        onSetSpecificCustomTime = { h, m -> viewModel.setSpecificCustomTime(h, m) },
+                        onSetHijriDateAdjustment = { viewModel.setHijriDateAdjustment(it) },
+                        onSelectCustomDate = { viewModel.setSelectedDate(it) },
+                        onSetSpecificCustomDate = { y, m, d -> viewModel.setSpecificCustomDate(y, m, d) },
+                        onResetDateToToday = { viewModel.resetDateToToday() },
+                        onResetAllTimeAndDateSettings = { viewModel.resetAllTimeAndDateSettings() },
                         onDismiss = { showSettingsDialog = false }
                     )
                 }
@@ -323,6 +400,17 @@ class MainActivity : ComponentActivity() {
     override fun onPause() {
         super.onPause()
         viewModel.compassManager.stopListening()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val cat = intent.getStringExtra("azkar_category")?.let {
+            try { DhikrCategory.valueOf(it) } catch (_: Exception) { null }
+        }
+        if (cat != null) {
+            viewModel.setTargetOpenAzkarCategory(cat)
+        }
     }
 }
 

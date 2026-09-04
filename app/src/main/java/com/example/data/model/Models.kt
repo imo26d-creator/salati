@@ -1,6 +1,7 @@
 package com.example.data.model
 
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.example.R
 
 enum class PrayerType(
     val arabicName: String,
@@ -140,55 +141,64 @@ enum class MuezzinVoice(
     val titleArabic: String,
     val descriptionArabic: String,
     val location: String,
-    val audioUrl: String = ""
+    val audioUrl: String = "",
+    val rawResId: Int = R.raw.adhan_makkah
 ) {
     MAKKAH(
         titleArabic = "أذان الحرم المكي (الشيخ علي ملا)",
         descriptionArabic = "المقام الحجازي التراثي العريق والمهيب",
         location = "مكة المكرمة",
-        audioUrl = ""
+        audioUrl = "https://raw.githubusercontent.com/Kiwifu/adhan-mp3/main/Ali_Ibn_Ahmad_Mala_6_-_Al_Haram_Al_Maki_(%D8%B9%D9%84%D9%8A_%D8%A8%D9%86_%D8%A3%D8%AD%D9%85%D8%AF_%D9%85%D9%84%D8%A7_-_%D8%A7%D9%84%D8%AD%D8%B1%D9%85_%D8%A7%D9%84%D9%85%D9%83%D9%8A).mp3",
+        rawResId = R.raw.adhan_makkah
     ),
     MADINAH(
-        titleArabic = "أذان المسجد النبوي (الشيخ عصام بخاري)",
+        titleArabic = "أذان المسجد النبوي الشريف",
         descriptionArabic = "أذان السكينة والخشوع والوقار المدني",
         location = "المدينة المنورة",
-        audioUrl = ""
+        audioUrl = "https://raw.githubusercontent.com/Kiwifu/adhan-mp3/main/Adhan_Al_Haram_Al_Madani_-_Al_Madinah_1_(%D8%A3%D8%B0%D8%A7%D9%86_%D8%A7%D9%84%D8%AD%D8%B1%D9%85_%D8%A7%D9%84%D9%85%D8%AF%D9%86%D9%8A_-_%D8%A7%D9%84%D9%85%D8%AF%D9%8A%D9%86%D8%A9_%D8%A7%D9%84%D9%85%D9%86%D9%88%D8%B1%D8%A9).mp3",
+        rawResId = R.raw.adhan_madinah
     ),
     AL_AQSA(
         titleArabic = "أذان المسجد الأقصى المبارك",
         descriptionArabic = "نبرة مقدسية شجية وصوت يفيض بالإيمان",
         location = "القدس الشريف",
-        audioUrl = ""
+        audioUrl = "https://raw.githubusercontent.com/Kiwifu/adhan-mp3/main/Adhan_Al_Aqsa_-_Jerusalem_(%D8%A3%D8%B0%D8%A7%D9%86_%D8%A7%D9%84%D9%85%D8%B3%D8%AC%D8%AF_%D8%A7%D9%84%D8%A3%D9%82%D8%B5%D9%89_-_%D8%A7%D9%84%D9%82%D8%AF%D8%B3).mp3",
+        rawResId = R.raw.adhan_alaqsa
     ),
     MISHARY(
         titleArabic = "أذان الشيخ مشاري راشد العفاسي",
         descriptionArabic = "صوت ندي خاشع ونبرة عذبة تأسر القلوب",
         location = "الكويت",
-        audioUrl = ""
+        audioUrl = "https://raw.githubusercontent.com/Kiwifu/adhan-mp3/main/Mishary_Rashid_Alafasy_1_-_Kuwait_(%D9%85%D8%B4%D8%A7%D8%B1%D9%8A_%D8%B1%D8%A7%D8%B4%D8%AF_%D8%A7%D9%84%D8%B9%D9%81%D8%A7%D8%B3%D9%8A_-_%D8%A7%D9%84%D9%83%D9%88%D9%8A%D8%AA).mp3",
+        rawResId = R.raw.adhan_mishary
     ),
     ABDULBASIT(
         titleArabic = "أذان الشيخ عبد الباسط عبد الصمد",
         descriptionArabic = "صوت نقي وأداء تاريخي من أروع ما سُمع",
         location = "مصر",
-        audioUrl = ""
+        audioUrl = "https://raw.githubusercontent.com/Kiwifu/adhan-mp3/main/Abdulbasit_Abdusamad_1_-_Egypt_(%D8%B9%D8%A8%D8%AF_%D8%A7%D9%84%D8%A8%D8%A7%D8%B3%D8%B7_%D8%B9%D8%A8%D8%AF_%D8%A7%D9%84%D8%B5%D9%85%D8%AF_-_%D9%85%D8%B5%D8%B1).mp3",
+        rawResId = R.raw.adhan_abdulbasit
     ),
     QATAMI(
         titleArabic = "أذان الشيخ ناصر القطامي",
         descriptionArabic = "نبرة مؤثرة وروحانية تأخذك إلى آفاق الخشوع",
         location = "الرياض",
-        audioUrl = ""
+        audioUrl = "https://raw.githubusercontent.com/Kiwifu/adhan-mp3/main/Nasser_Al_Qatami_-_HQ_(%D9%86%D8%A7%D8%B5%D8%B1_%D8%A7%D9%84%D9%82%D8%B7%D8%A7%D9%85%D9%8A).mp3",
+        rawResId = R.raw.adhan_qatami
     ),
     TAKBEERAT(
         titleArabic = "تكبيرات الأذان الشرعية (الله أكبر)",
         descriptionArabic = "تكبيرات بصوت خاشع ومؤثر خالٍ تماماً من أي موسيقى",
         location = "تسجيل شرعي",
-        audioUrl = ""
+        audioUrl = "",
+        rawResId = R.raw.adhan_takbeerat
     ),
     RECITER_AYAH(
         titleArabic = "تلاوة قرآنية مباركة (الشيخ مشاري)",
         descriptionArabic = "قراءة آيات بينات من القرآن الكريم بصوت عذب خاشع",
         location = "تلاوة خاشعة",
-        audioUrl = "https://server8.mp3quran.net/afs/001.mp3"
+        audioUrl = "https://server8.mp3quran.net/afs/001.mp3",
+        rawResId = R.raw.adhan_takbeerat
     );
 
     val arabicName: String get() = titleArabic

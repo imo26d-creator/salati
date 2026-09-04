@@ -1,6 +1,7 @@
 package com.example.ui.viewmodel
 
 import android.app.Application
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.calculator.HijriCalendarHelper
@@ -15,6 +16,7 @@ import com.example.data.repository.QuranDataRepository
 import com.example.data.repository.TasbihCategory
 import com.example.data.repository.TasbihDataRepository
 import com.example.util.AzanSoundPlayer
+import com.example.util.AzkarNotificationScheduler
 import com.example.util.CompassManager
 import com.example.util.PrayerNotificationScheduler
 import com.example.util.QuranAudioPlayer
@@ -137,7 +139,20 @@ data class NoorUiState(
     val deviceCurrentTimeFormatted: String = "",
     val deviceTimeZoneName: String = "",
     val prayerManualOffsets: Map<PrayerType, Int> = emptyMap(),
-    val timeSyncSuccessMessage: String? = null
+    val timeSyncSuccessMessage: String? = null,
+    val morningAzkarEnabled: Boolean = true,
+    val morningAzkarHour: Int = 6,
+    val morningAzkarMinute: Int = 30,
+    val eveningAzkarEnabled: Boolean = true,
+    val eveningAzkarHour: Int = 17,
+    val eveningAzkarMinute: Int = 30,
+    val azkarStreakDays: Int = 3,
+    val targetOpenAzkarCategory: DhikrCategory? = null,
+    val azkarFeedbackMessage: String? = null,
+    val hijriDateAdjustmentDays: Int = 0,
+    val manualTimeOffsetMinutes: Int = 0,
+    val isCustomDateSelected: Boolean = false,
+    val dateSyncSuccessMessage: String? = null
 )
 
 class NoorViewModel(application: Application) : AndroidViewModel(application) {
@@ -152,13 +167,27 @@ class NoorViewModel(application: Application) : AndroidViewModel(application) {
     private val displayDateFormat = SimpleDateFormat("EEEE، d MMMM yyyy", Locale("ar"))
 
     init {
+        AzanSoundPlayer.init(application.applicationContext)
         val db = NoorDatabase.getInstance(application)
         repository = NoorRepository(db.noorDao())
 
         // Initial setup
         val initialCal = Calendar.getInstance()
         val todayStr = dateFormat.format(initialCal.time)
-        val initialHijri = HijriCalendarHelper.getHijriDate(initialCal)
+
+        // Time and Date settings persistence
+        val timePrefs = application.applicationContext.getSharedPreferences("noor_time_date_prefs", Context.MODE_PRIVATE)
+        val savedHijriAdj = timePrefs.getInt("pref_hijri_adjustment_days", 0)
+        val savedTimeOffset = timePrefs.getInt("pref_manual_time_offset_minutes", 0)
+        val savedAutoTime = timePrefs.getBoolean("pref_is_auto_phone_time", true)
+        val saved24Hour = timePrefs.getBoolean("pref_is_24_hour_format", false)
+
+        val effectiveCal = (initialCal.clone() as Calendar).apply {
+            if (savedTimeOffset != 0) {
+                add(Calendar.MINUTE, savedTimeOffset)
+            }
+        }
+        val initialHijri = HijriCalendarHelper.getHijriDate(effectiveCal, savedHijriAdj)
 
         val qibla = QiblaCalculator.calculateQiblaBearing(_uiState.value.latitude, _uiState.value.longitude)
         val dist = QiblaCalculator.calculateDistanceToKaabaKm(_uiState.value.latitude, _uiState.value.longitude)
@@ -166,13 +195,36 @@ class NoorViewModel(application: Application) : AndroidViewModel(application) {
 
         val randomDhikr = DailyCompanionRepository.randomOpeningAzkar.random()
 
+        // Azkar Notifications initial setup
+        val azkarPrefs = AzkarNotificationScheduler.getPrefs(application.applicationContext)
+        val mEnabled = azkarPrefs.getBoolean(AzkarNotificationScheduler.KEY_MORNING_ENABLED, true)
+        val mHour = azkarPrefs.getInt(AzkarNotificationScheduler.KEY_MORNING_HOUR, 6)
+        val mMin = azkarPrefs.getInt(AzkarNotificationScheduler.KEY_MORNING_MINUTE, 30)
+        val eEnabled = azkarPrefs.getBoolean(AzkarNotificationScheduler.KEY_EVENING_ENABLED, true)
+        val eHour = azkarPrefs.getInt(AzkarNotificationScheduler.KEY_EVENING_HOUR, 17)
+        val eMin = azkarPrefs.getInt(AzkarNotificationScheduler.KEY_EVENING_MINUTE, 30)
+        val streak = azkarPrefs.getInt(AzkarNotificationScheduler.KEY_STREAK_COUNT, 3)
+
+        AzkarNotificationScheduler.scheduleAllConfigured(application.applicationContext)
+
         _uiState.update {
             it.copy(
                 gregorianDateFormatted = displayDateFormat.format(initialCal.time),
                 hijriDate = initialHijri,
                 qiblaBearing = qibla,
                 distanceToMakkahKm = dist,
-                randomOpeningDhikr = randomDhikr
+                randomOpeningDhikr = randomDhikr,
+                morningAzkarEnabled = mEnabled,
+                morningAzkarHour = mHour,
+                morningAzkarMinute = mMin,
+                eveningAzkarEnabled = eEnabled,
+                eveningAzkarHour = eHour,
+                eveningAzkarMinute = eMin,
+                azkarStreakDays = streak,
+                hijriDateAdjustmentDays = savedHijriAdj,
+                manualTimeOffsetMinutes = savedTimeOffset,
+                isAutoPhoneTime = savedAutoTime,
+                is24HourFormat = saved24Hour
             )
         }
 
@@ -253,21 +305,33 @@ class NoorViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun isSameDay(c1: Calendar, c2: Calendar): Boolean {
+        return c1.get(Calendar.YEAR) == c2.get(Calendar.YEAR) &&
+               c1.get(Calendar.DAY_OF_YEAR) == c2.get(Calendar.DAY_OF_YEAR)
+    }
+
     private fun startLiveTimer() {
         viewModelScope.launch {
             val timeFormat12 = SimpleDateFormat("hh:mm:ss a", Locale("ar"))
             val timeFormat24 = SimpleDateFormat("HH:mm:ss", Locale.US)
             while (isActive) {
-                val now = Calendar.getInstance()
+                val realNow = Calendar.getInstance()
                 val tz = TimeZone.getDefault()
-                val offsetHours = tz.getOffset(now.timeInMillis) / 3600000
+                val offsetHours = tz.getOffset(realNow.timeInMillis) / 3600000
                 val sign = if (offsetHours >= 0) "+" else ""
                 val tzFormatted = "GMT$sign$offsetHours (${tz.displayName})"
 
+                val offsetMin = _uiState.value.manualTimeOffsetMinutes
+                val effectiveNow = (realNow.clone() as Calendar).apply {
+                    if (offsetMin != 0) {
+                        add(Calendar.MINUTE, offsetMin)
+                    }
+                }
+
                 val formattedTime = if (_uiState.value.is24HourFormat) {
-                    timeFormat24.format(now.time)
+                    timeFormat24.format(effectiveNow.time)
                 } else {
-                    timeFormat12.format(now.time)
+                    timeFormat12.format(effectiveNow.time)
                 }
 
                 _uiState.update {
@@ -277,15 +341,20 @@ class NoorViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
 
-                updateAtmosphereAndGreeting(now)
-                updateCountdown(now)
+                updateAtmosphereAndGreeting(effectiveNow)
+                updateCountdown(effectiveNow)
                 delay(1000)
             }
         }
     }
 
     fun recalculatePrayerTimes() {
-        val nowCal = Calendar.getInstance()
+        val offsetMin = _uiState.value.manualTimeOffsetMinutes
+        val nowCal = (Calendar.getInstance().clone() as Calendar).apply {
+            if (offsetMin != 0) {
+                add(Calendar.MINUTE, offsetMin)
+            }
+        }
         val todayTimes = PrayerTimeCalculator.calculatePrayerTimes(
             calendar = nowCal,
             latitude = _uiState.value.latitude,
@@ -298,21 +367,30 @@ class NoorViewModel(application: Application) : AndroidViewModel(application) {
 
         val nextP = todayTimes.find { it.isNext } ?: todayTimes.firstOrNull { it.type == PrayerType.FAJR }
 
-        val selectedTimes = PrayerTimeCalculator.calculatePrayerTimes(
-            calendar = _uiState.value.selectedDate,
-            latitude = _uiState.value.latitude,
-            longitude = _uiState.value.longitude,
-            method = _uiState.value.calculationMethod,
-            juristicMethod = _uiState.value.juristicMethod,
-            manualOffsetMinutes = _uiState.value.prayerManualOffsets,
-            is24HourFormat = _uiState.value.is24HourFormat
-        )
+        val selectedCal = _uiState.value.selectedDate
+        val selectedTimes = if (isSameDay(selectedCal, Calendar.getInstance())) {
+            todayTimes
+        } else {
+            PrayerTimeCalculator.calculatePrayerTimes(
+                calendar = selectedCal,
+                latitude = _uiState.value.latitude,
+                longitude = _uiState.value.longitude,
+                method = _uiState.value.calculationMethod,
+                juristicMethod = _uiState.value.juristicMethod,
+                manualOffsetMinutes = _uiState.value.prayerManualOffsets,
+                is24HourFormat = _uiState.value.is24HourFormat
+            )
+        }
+
+        val currentHijri = HijriCalendarHelper.getHijriDate(selectedCal, _uiState.value.hijriDateAdjustmentDays)
 
         _uiState.update {
             it.copy(
                 todayPrayerTimes = todayTimes,
                 nextPrayer = nextP,
-                selectedDatePrayerTimes = selectedTimes
+                selectedDatePrayerTimes = selectedTimes,
+                hijriDate = currentHijri,
+                gregorianDateFormatted = displayDateFormat.format(selectedCal.time)
             )
         }
         schedulePrayerNotifications()
@@ -368,18 +446,30 @@ class NoorViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setSelectedDate(calendar: Calendar) {
+        val isToday = isSameDay(calendar, Calendar.getInstance())
         val selectedTimes = PrayerTimeCalculator.calculatePrayerTimes(
             calendar = calendar,
             latitude = _uiState.value.latitude,
             longitude = _uiState.value.longitude,
             method = _uiState.value.calculationMethod,
-            juristicMethod = _uiState.value.juristicMethod
+            juristicMethod = _uiState.value.juristicMethod,
+            manualOffsetMinutes = _uiState.value.prayerManualOffsets,
+            is24HourFormat = _uiState.value.is24HourFormat
         )
+        val currentHijri = HijriCalendarHelper.getHijriDate(calendar, _uiState.value.hijriDateAdjustmentDays)
         _uiState.update {
             it.copy(
                 selectedDate = calendar,
-                selectedDatePrayerTimes = selectedTimes
+                selectedDatePrayerTimes = selectedTimes,
+                hijriDate = currentHijri,
+                gregorianDateFormatted = displayDateFormat.format(calendar.time),
+                isCustomDateSelected = !isToday,
+                dateSyncSuccessMessage = if (!isToday) "تم تغيير التاريخ المعتمد إلى: ${displayDateFormat.format(calendar.time)} 📅" else null
             )
+        }
+        viewModelScope.launch {
+            delay(3500)
+            _uiState.update { it.copy(dateSyncSuccessMessage = null) }
         }
     }
 
@@ -694,8 +784,15 @@ class NoorViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun toggleAutoPhoneTime(enabled: Boolean) {
+        val context = getApplication<Application>().applicationContext
+        context.getSharedPreferences("noor_time_date_prefs", Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean("pref_is_auto_phone_time", enabled)
+            .apply()
+
         _uiState.update { it.copy(isAutoPhoneTime = enabled) }
         if (enabled) {
+            setManualTimeOffsetMinutes(0)
             syncWithDeviceTimeNow()
         }
     }
@@ -706,15 +803,25 @@ class NoorViewModel(application: Application) : AndroidViewModel(application) {
         val offsetHours = tz.getOffset(nowCal.timeInMillis) / 3600000
         val sign = if (offsetHours >= 0) "+" else ""
         val tzFormatted = "GMT$sign$offsetHours (${tz.displayName})"
-        val hijri = HijriCalendarHelper.getHijriDate(nowCal)
+        val hijri = HijriCalendarHelper.getHijriDate(nowCal, _uiState.value.hijriDateAdjustmentDays)
+
+        val context = getApplication<Application>().applicationContext
+        context.getSharedPreferences("noor_time_date_prefs", Context.MODE_PRIVATE)
+            .edit()
+            .putInt("pref_manual_time_offset_minutes", 0)
+            .putBoolean("pref_is_auto_phone_time", true)
+            .apply()
 
         _uiState.update {
             it.copy(
                 selectedDate = nowCal,
+                isCustomDateSelected = false,
+                manualTimeOffsetMinutes = 0,
+                isAutoPhoneTime = true,
                 gregorianDateFormatted = displayDateFormat.format(nowCal.time),
                 hijriDate = hijri,
                 deviceTimeZoneName = tzFormatted,
-                timeSyncSuccessMessage = "تمت مزامنة الوقت والتوقيت مع ساعة هاتفك بنجاح ⏱️"
+                timeSyncSuccessMessage = "تمت مزامنة الوقت والتاريخ مع ساعة هاتفك بنجاح ⏱️"
             )
         }
         recalculatePrayerTimes()
@@ -725,6 +832,12 @@ class NoorViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun toggle24HourFormat(is24Hour: Boolean) {
+        val context = getApplication<Application>().applicationContext
+        context.getSharedPreferences("noor_time_date_prefs", Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean("pref_is_24_hour_format", is24Hour)
+            .apply()
+
         _uiState.update { it.copy(is24HourFormat = is24Hour) }
         recalculatePrayerTimes()
     }
@@ -743,6 +856,127 @@ class NoorViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearTimeSyncMessage() {
         _uiState.update { it.copy(timeSyncSuccessMessage = null) }
+    }
+
+    fun setHijriDateAdjustment(days: Int) {
+        val clamped = days.coerceIn(-3, 3)
+        val context = getApplication<Application>().applicationContext
+        context.getSharedPreferences("noor_time_date_prefs", Context.MODE_PRIVATE)
+            .edit()
+            .putInt("pref_hijri_adjustment_days", clamped)
+            .apply()
+
+        val newHijri = HijriCalendarHelper.getHijriDate(_uiState.value.selectedDate, clamped)
+        _uiState.update {
+            it.copy(
+                hijriDateAdjustmentDays = clamped,
+                hijriDate = newHijri,
+                dateSyncSuccessMessage = if (clamped == 0) "تم ضبط التاريخ الهجري على الحساب الفلكي التلقائي 🌙"
+                else "تم تعديل التاريخ الهجري بمقدار ${if (clamped > 0) "+$clamped" else "$clamped"} يوم 🌙"
+            )
+        }
+        recalculatePrayerTimes()
+        viewModelScope.launch {
+            delay(3500)
+            _uiState.update { it.copy(dateSyncSuccessMessage = null) }
+        }
+    }
+
+    fun setManualTimeOffsetMinutes(minutes: Int) {
+        val clamped = minutes.coerceIn(-720, 720)
+        val context = getApplication<Application>().applicationContext
+        context.getSharedPreferences("noor_time_date_prefs", Context.MODE_PRIVATE)
+            .edit()
+            .putInt("pref_manual_time_offset_minutes", clamped)
+            .putBoolean("pref_is_auto_phone_time", clamped == 0)
+            .apply()
+
+        _uiState.update {
+            it.copy(
+                manualTimeOffsetMinutes = clamped,
+                isAutoPhoneTime = (clamped == 0),
+                timeSyncSuccessMessage = if (clamped == 0) "تمت إعادة ضبط الوقت ومزامنة ساعة الهاتف ⏱️"
+                else "تم تعديل الوقت بمقدار ${if (clamped > 0) "+$clamped" else "$clamped"} دقيقة ⏱️"
+            )
+        }
+        recalculatePrayerTimes()
+        viewModelScope.launch {
+            delay(3500)
+            _uiState.update { it.copy(timeSyncSuccessMessage = null) }
+        }
+    }
+
+    fun adjustManualTimeBy(deltaMinutes: Int) {
+        val newOffset = _uiState.value.manualTimeOffsetMinutes + deltaMinutes
+        setManualTimeOffsetMinutes(newOffset)
+    }
+
+    fun setSpecificCustomTime(hourOfDay: Int, minute: Int) {
+        val now = Calendar.getInstance()
+        val currentHour = now.get(Calendar.HOUR_OF_DAY)
+        val currentMin = now.get(Calendar.MINUTE)
+        val currentTotalMin = currentHour * 60 + currentMin
+        val targetTotalMin = hourOfDay * 60 + minute
+        var diff = targetTotalMin - currentTotalMin
+        if (diff > 720) diff -= 1440
+        if (diff < -720) diff += 1440
+        setManualTimeOffsetMinutes(diff)
+    }
+
+    fun setSpecificCustomDate(year: Int, monthIndex: Int, dayOfMonth: Int) {
+        val cal = Calendar.getInstance().apply {
+            set(Calendar.YEAR, year)
+            set(Calendar.MONTH, monthIndex)
+            set(Calendar.DAY_OF_MONTH, dayOfMonth)
+        }
+        setSelectedDate(cal)
+    }
+
+    fun resetDateToToday() {
+        val nowCal = Calendar.getInstance()
+        val effectiveCal = (nowCal.clone() as Calendar).apply {
+            if (_uiState.value.manualTimeOffsetMinutes != 0) {
+                add(Calendar.MINUTE, _uiState.value.manualTimeOffsetMinutes)
+            }
+        }
+        setSelectedDate(effectiveCal)
+        _uiState.update {
+            it.copy(
+                isCustomDateSelected = false,
+                dateSyncSuccessMessage = "تمت العودة إلى تاريخ اليوم 🔄"
+            )
+        }
+        viewModelScope.launch {
+            delay(3500)
+            _uiState.update { it.copy(dateSyncSuccessMessage = null) }
+        }
+    }
+
+    fun resetAllTimeAndDateSettings() {
+        val context = getApplication<Application>().applicationContext
+        context.getSharedPreferences("noor_time_date_prefs", Context.MODE_PRIVATE)
+            .edit()
+            .putInt("pref_hijri_adjustment_days", 0)
+            .putInt("pref_manual_time_offset_minutes", 0)
+            .putBoolean("pref_is_auto_phone_time", true)
+            .apply()
+
+        val nowCal = Calendar.getInstance()
+        _uiState.update {
+            it.copy(
+                hijriDateAdjustmentDays = 0,
+                manualTimeOffsetMinutes = 0,
+                isAutoPhoneTime = true,
+                selectedDate = nowCal,
+                isCustomDateSelected = false,
+                timeSyncSuccessMessage = "تمت استعادة إعدادات الوقت والتاريخ الافتراضية بنجاح ⏱️"
+            )
+        }
+        syncWithDeviceTimeNow()
+    }
+
+    fun clearDateFeedback() {
+        _uiState.update { it.copy(dateSyncSuccessMessage = null) }
     }
 
     fun setSelectedMuezzin(muezzin: MuezzinVoice) {
@@ -849,8 +1083,14 @@ class NoorViewModel(application: Application) : AndroidViewModel(application) {
 
     fun playPrayerAzanPreview(prayerType: PrayerType) {
         val config = _uiState.value.prayerAzanConfigs[prayerType] ?: PrayerAzanConfig(prayerType = prayerType)
+        val muezzinToPlay = when (config.alertType) {
+            AzanAlertType.FULL_AZAN -> config.muezzin
+            AzanAlertType.TAKBEER_ONLY -> MuezzinVoice.TAKBEERAT
+            AzanAlertType.RECITER_VOICE -> MuezzinVoice.RECITER_AYAH
+            AzanAlertType.VIBRATE_ONLY, AzanAlertType.SILENT -> config.muezzin
+        }
         AzanSoundPlayer.playMuezzinPreview(
-            muezzin = config.muezzin,
+            muezzin = muezzinToPlay,
             volume = config.volume,
             prayerType = prayerType
         )
@@ -861,6 +1101,25 @@ class NoorViewModel(application: Application) : AndroidViewModel(application) {
             stopMuezzinPreview()
         } else {
             playPrayerAzanPreview(prayerType)
+        }
+    }
+
+    /**
+     * Toggles playing the Adhan early (before the prayer time).
+     * If playing, it stops immediately; otherwise plays the configured Muezzin for that prayer.
+     */
+    fun toggleEarlyAdhanListening(prayerType: PrayerType? = null) {
+        val targetPrayer = prayerType ?: _uiState.value.nextPrayer?.type ?: PrayerType.DHUHR
+        if (_uiState.value.isAzanAudioPlaying && (_uiState.value.playingPrayer == targetPrayer || prayerType == null)) {
+            stopMuezzinPreview()
+        } else {
+            val config = _uiState.value.prayerAzanConfigs[targetPrayer] ?: PrayerAzanConfig(prayerType = targetPrayer)
+            val volume = if (config.volume > 0.1f) config.volume else _uiState.value.azanVolume.coerceAtLeast(0.75f)
+            AzanSoundPlayer.playMuezzinPreview(
+                muezzin = config.muezzin,
+                volume = volume,
+                prayerType = targetPrayer
+            )
         }
     }
 
@@ -922,5 +1181,92 @@ class NoorViewModel(application: Application) : AndroidViewModel(application) {
                 volume = config.volume
             )
         } catch (_: Exception) {}
+    }
+
+    fun setMorningAzkarNotification(enabled: Boolean, hour: Int, minute: Int) {
+        val context = getApplication<Application>().applicationContext
+        if (enabled) {
+            AzkarNotificationScheduler.scheduleReminder(context, isMorning = true, hour, minute)
+        } else {
+            AzkarNotificationScheduler.cancelReminder(context, isMorning = true)
+        }
+        val amPm = if (hour < 12) "ص" else "م"
+        val displayHour = if (hour % 12 == 0) 12 else hour % 12
+        val formatted = String.format(Locale.US, "%02d:%02d %s", displayHour, minute, amPm)
+        val msg = if (enabled) {
+            "تم تفعيل تنبيه أذكار الصباح بنجاح عند الساعة $formatted ☀️"
+        } else {
+            "تم إيقاف تنبيه أذكار الصباح"
+        }
+        _uiState.update {
+            it.copy(
+                morningAzkarEnabled = enabled,
+                morningAzkarHour = hour,
+                morningAzkarMinute = minute,
+                azkarFeedbackMessage = msg
+            )
+        }
+    }
+
+    fun setEveningAzkarNotification(enabled: Boolean, hour: Int, minute: Int) {
+        val context = getApplication<Application>().applicationContext
+        if (enabled) {
+            AzkarNotificationScheduler.scheduleReminder(context, isMorning = false, hour, minute)
+        } else {
+            AzkarNotificationScheduler.cancelReminder(context, isMorning = false)
+        }
+        val amPm = if (hour < 12) "ص" else "م"
+        val displayHour = if (hour % 12 == 0) 12 else hour % 12
+        val formatted = String.format(Locale.US, "%02d:%02d %s", displayHour, minute, amPm)
+        val msg = if (enabled) {
+            "تم تفعيل تنبيه أذكار المساء بنجاح عند الساعة $formatted 🌙"
+        } else {
+            "تم إيقاف تنبيه أذكار المساء"
+        }
+        _uiState.update {
+            it.copy(
+                eveningAzkarEnabled = enabled,
+                eveningAzkarHour = hour,
+                eveningAzkarMinute = minute,
+                azkarFeedbackMessage = msg
+            )
+        }
+    }
+
+    fun sendTestAzkarNotification(isMorning: Boolean) {
+        val context = getApplication<Application>().applicationContext
+        AzkarNotificationScheduler.sendInstantTestNotification(context, isMorning)
+        val msg = if (isMorning) "تم إرسال إشعار أذكار الصباح التجريبي ☀️" else "تم إرسال إشعار أذكار المساء التجريبي 🌙"
+        _uiState.update { it.copy(azkarFeedbackMessage = msg) }
+    }
+
+    fun recordAzkarCompleted(category: DhikrCategory) {
+        val context = getApplication<Application>().applicationContext
+        val newStreak = AzkarNotificationScheduler.recordAzkarSessionCompleted(context)
+        _uiState.update {
+            it.copy(
+                azkarStreakDays = newStreak,
+                azkarFeedbackMessage = "تقبل الله طاعتكم! سلسلة الاستمرارية الحالية: $newStreak أيام متتالية 🌟"
+            )
+        }
+        viewModelScope.launch {
+            if (category == DhikrCategory.MORNING) {
+                repository.saveDailyChecklist(
+                    _uiState.value.dailyChecklist.copy(morningAzkarDone = true)
+                )
+            } else if (category == DhikrCategory.EVENING) {
+                repository.saveDailyChecklist(
+                    _uiState.value.dailyChecklist.copy(eveningAzkarDone = true)
+                )
+            }
+        }
+    }
+
+    fun clearAzkarFeedback() {
+        _uiState.update { it.copy(azkarFeedbackMessage = null) }
+    }
+
+    fun setTargetOpenAzkarCategory(category: DhikrCategory?) {
+        _uiState.update { it.copy(targetOpenAzkarCategory = category) }
     }
 }

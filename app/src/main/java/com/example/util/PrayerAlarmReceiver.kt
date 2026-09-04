@@ -101,16 +101,17 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
             notificationManager.notify(prayerType.ordinal + 1000, notification)
         } catch (_: SecurityException) {}
 
-        // Handle Audio and Vibration (Strictly free from any musical instruments)
+        // Handle Audio and Vibration (Strictly authentic Adhan voices free from any musical instruments)
+        AzanSoundPlayer.init(context)
         when (alertType) {
             AzanAlertType.FULL_AZAN -> {
-                AzanSoundPlayer.playMuezzinPreview(muezzin, volume, prayerType)
+                AzanSoundPlayer.playMuezzinPreview(muezzin, volume, prayerType, context = context)
             }
             AzanAlertType.TAKBEER_ONLY -> {
-                AzanSoundPlayer.playTakbeerAlert(volume)
+                AzanSoundPlayer.playMuezzinPreview(MuezzinVoice.TAKBEERAT, volume, prayerType, context = context)
             }
             AzanAlertType.RECITER_VOICE -> {
-                AzanSoundPlayer.playReciterAyahAlert(volume)
+                AzanSoundPlayer.playMuezzinPreview(MuezzinVoice.RECITER_AYAH, volume, prayerType, context = context)
             }
             AzanAlertType.VIBRATE_ONLY -> {
                 triggerVibration(context)

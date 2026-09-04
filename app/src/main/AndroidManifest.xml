@@ -43,6 +43,15 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
+
+        <receiver
+            android:name=".util.AzkarAlarmReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.example.ACTION_AZKAR_REMINDER" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

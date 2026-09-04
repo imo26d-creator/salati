@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -35,6 +37,7 @@ fun PrayersScreen(
     onToggleAzan: (PrayerType) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenMuezzinSelection: () -> Unit = onOpenSettings,
+    onToggleListenAdhanEarly: (PrayerType) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showMonthlyDialog by remember { mutableStateOf(false) }
@@ -220,12 +223,72 @@ fun PrayersScreen(
                 }
             }
 
+            // Early Adhan Hearing Quick Banner for the next prayer
+            if (isToday && uiState.nextPrayer != null) {
+                val nextP = uiState.nextPrayer
+                val isPlayingNext = uiState.isAzanAudioPlaying && (uiState.playingPrayer == nextP.type || uiState.playingPrayer == null)
+                item {
+                    GlassCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        backgroundColor = if (isPlayingNext) EmeraldDark.copy(alpha = 0.85f) else MidnightNavyCard.copy(alpha = 0.85f),
+                        borderColor = if (isPlayingNext) EmeraldLight else SoftGoldBright.copy(alpha = 0.6f)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "الأذان القادم: صلاة ${nextP.type.arabicName} (${nextP.timeFormatted})",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = SoftGoldBright
+                                )
+                                Text(
+                                    text = if (isPlayingNext) "جارٍ سماع الأذان الآن..." else "يمكنك سماع الأذان قبل حلول الموعد",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                    color = IvoryWhite
+                                )
+                            }
+
+                            Button(
+                                onClick = { onToggleListenAdhanEarly(nextP.type) },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (isPlayingNext) Color(0xFFC62828) else EmeraldDark
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, if (isPlayingNext) Color.White else EmeraldLight),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (isPlayingNext) Icons.Default.Stop else Icons.Default.Hearing,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(
+                                        text = if (isPlayingNext) "إيقاف ⏹️" else "سماع الأذان 🔊",
+                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = Color.White
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // List of Prayer Cards (Fajr, Sunrise, Dhuhr, Asr, Maghrib, Isha)
             items(uiState.selectedDatePrayerTimes) { prayer ->
                 val prayerConfig = uiState.prayerAzanConfigs[prayer.type]
                 val isAzanActive = prayerConfig?.isEnabled ?: (uiState.prayerAzanEnabled[prayer.type] ?: true)
                 val assignedMuezzinName = prayerConfig?.muezzin?.titleArabic?.substringBefore(" (") ?: uiState.selectedMuezzin.titleArabic.substringBefore(" (")
                 val assignedVol = ((prayerConfig?.volume ?: uiState.azanVolume) * 100).toInt()
+                val isPlayingThis = uiState.isAzanAudioPlaying && (uiState.playingPrayer == prayer.type)
 
                 PrayerTimeScheduleCard(
                     prayer = prayer,
@@ -233,7 +296,9 @@ fun PrayersScreen(
                     onToggleAzan = { onToggleAzan(prayer.type) },
                     muezzinName = assignedMuezzinName,
                     volumePercent = assignedVol,
-                    onConfigureSound = onOpenMuezzinSelection
+                    onConfigureSound = onOpenMuezzinSelection,
+                    isAdhanPlaying = isPlayingThis,
+                    onToggleListenAdhanEarly = { onToggleListenAdhanEarly(prayer.type) }
                 )
             }
 

@@ -1,5 +1,6 @@
 package com.example.ui.components
 
+import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -36,6 +37,8 @@ import com.example.ui.viewmodel.NoorUiState
 fun PrayerCountdownHero(
     uiState: NoorUiState,
     onPrepareClick: () -> Unit,
+    onToggleListenAdhanEarly: (PrayerType) -> Unit = {},
+    onOpenPreAlertSettings: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val next = uiState.nextPrayer ?: return
@@ -151,37 +154,136 @@ fun PrayerCountdownHero(
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
-            // Action Button: استعد للصلاة
-            Button(
-                onClick = onPrepareClick,
-                modifier = Modifier
-                    .fillMaxWidth(0.85f)
-                    .height(48.dp)
-                    .scale(pulseScale)
-                    .testTag("prepare_prayer_button"),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = EmeraldDark
-                ),
-                shape = RoundedCornerShape(24.dp),
-                border = BorderStroke(1.dp, EmeraldLight.copy(alpha = 0.6f))
+            val isPlayingThis = uiState.isAzanAudioPlaying && (uiState.playingPrayer == next.type || uiState.playingPrayer == null)
+            val prayerConfig = uiState.prayerAzanConfigs[next.type]
+            val assignedMuezzin = prayerConfig?.muezzin ?: uiState.selectedMuezzin
+
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                // 1. زر "استعد للصلاة 🤍" بالأعلى
+                Button(
+                    onClick = onPrepareClick,
+                    modifier = Modifier
+                        .fillMaxWidth(0.92f)
+                        .height(48.dp)
+                        .scale(pulseScale)
+                        .testTag("prepare_prayer_button"),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = EmeraldDark
+                    ),
+                    shape = RoundedCornerShape(24.dp),
+                    border = BorderStroke(1.2.dp, EmeraldLight.copy(alpha = 0.8f))
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.WaterDrop,
-                        contentDescription = null,
-                        tint = EmeraldLight,
-                        modifier = Modifier.size(18.dp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.WaterDrop,
+                            contentDescription = null,
+                            tint = EmeraldLight,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = "استعد للصلاة 🤍",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = IvoryWhite
+                        )
+                    }
+                }
+
+                // 2. زر "سماع الأذان قبل وقته 🔊" تحت زر استعداد للصلاة مباشرة
+                Button(
+                    onClick = { onToggleListenAdhanEarly(next.type) },
+                    modifier = Modifier
+                        .fillMaxWidth(0.92f)
+                        .height(48.dp)
+                        .testTag("listen_adhan_early_hero_button"),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isPlayingThis) Color(0xFFC62828) else SoftGoldDark.copy(alpha = 0.9f)
+                    ),
+                    shape = RoundedCornerShape(24.dp),
+                    border = BorderStroke(
+                        1.2.dp,
+                        if (isPlayingThis) Color.White else SoftGoldBright
                     )
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isPlayingThis) Icons.Default.StopCircle else Icons.Default.Campaign,
+                            contentDescription = if (isPlayingThis) "إيقاف الأذان" else "سماع الأذان قبل وقته",
+                            tint = if (isPlayingThis) Color.White else SoftGoldBright,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = if (isPlayingThis) {
+                                "إيقاف أذان ${next.type.arabicName} ⏹️"
+                            } else {
+                                "سماع أذان ${next.type.arabicName} قبل وقته 🔊"
+                            },
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            ),
+                            color = IvoryWhite
+                        )
+                    }
+                }
+
+                // 3. صف المعلومات وخيار التنبيه المسبق
+                Row(
+                    modifier = Modifier.fillMaxWidth(0.92f),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
-                        text = "استعد للصلاة 🤍",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = IvoryWhite
+                        text = if (isPlayingThis) {
+                            "جارٍ سماع صوت ${assignedMuezzin.titleArabic.substringBefore(" (")} 🕌"
+                        } else {
+                            "المؤذن: ${assignedMuezzin.titleArabic.substringBefore(" (")}"
+                        },
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                        color = if (isPlayingThis) EmeraldLight else TextMuted
                     )
+
+                    OutlinedButton(
+                        onClick = onOpenPreAlertSettings,
+                        modifier = Modifier
+                            .height(34.dp)
+                            .testTag("pre_alert_setting_button"),
+                        shape = RoundedCornerShape(17.dp),
+                        border = BorderStroke(0.8.dp, SoftGold.copy(alpha = 0.6f)),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = IvoryWhite),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Alarm,
+                                contentDescription = null,
+                                tint = SoftGoldBright,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Text(
+                                text = "تنبيه قبل ${uiState.prePrayerAlertMinutes}د ⏱️",
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 11.sp
+                                ),
+                                color = SoftGoldBright
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -515,4 +617,236 @@ fun DailyDhikrCard(
             }
         }
     }
+}
+
+/**
+ * Floating mini-player shown when Adhan is actively playing,
+ * providing the user with real-time feedback and a prominent one-tap stop button.
+ */
+@Composable
+fun FloatingAdhanPlayerBar(
+    uiState: NoorUiState,
+    onStop: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val prayerName = uiState.playingPrayer?.arabicName ?: uiState.nextPrayer?.type?.arabicName ?: "الصلاة"
+    val muezzinName = uiState.playingMuezzin?.titleArabic?.substringBefore(" (")
+        ?: uiState.selectedMuezzin.titleArabic.substringBefore(" (")
+
+    val infiniteTransition = rememberInfiniteTransition(label = "audioWave")
+    val waveScale by infiniteTransition.animateFloat(
+        initialValue = 0.9f,
+        targetValue = 1.15f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(600, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "wave"
+    )
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(
+                Brush.horizontalGradient(
+                    listOf(
+                        MidnightNavyCard.copy(alpha = 0.98f),
+                        EmeraldDark.copy(alpha = 0.95f),
+                        MidnightNavyCard.copy(alpha = 0.98f)
+                    )
+                )
+            )
+            .border(1.5.dp, EmeraldLight.copy(alpha = 0.8f), RoundedCornerShape(16.dp))
+            .padding(horizontal = 14.dp, vertical = 10.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(EmeraldDark)
+                        .border(1.dp, SoftGoldBright, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.GraphicEq,
+                        contentDescription = null,
+                        tint = SoftGoldBright,
+                        modifier = Modifier
+                            .size(22.dp)
+                            .scale(waveScale)
+                    )
+                }
+
+                Column {
+                    Text(
+                        text = "أذان $prayerName يعمل الآن (سماع مسبق)",
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        ),
+                        color = IvoryWhite
+                    )
+                    Text(
+                        text = "صوت المؤذن: $muezzinName 🕌",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                        color = SoftGoldBright
+                    )
+                }
+            }
+
+            Button(
+                onClick = onStop,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
+                shape = RoundedCornerShape(12.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Stop,
+                        contentDescription = "إيقاف",
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = "إيقاف",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Dialog for setting up pre-prayer reminders and testing the Adhan playback before the prayer.
+ */
+@Composable
+fun PreAdhanAlertConfigDialog(
+    currentMinutes: Int,
+    isAzanPlaying: Boolean,
+    nextPrayerName: String,
+    onSetMinutes: (Int) -> Unit,
+    onToggleListenEarly: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = MidnightNavyCard,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Alarm,
+                    contentDescription = null,
+                    tint = SoftGoldBright,
+                    modifier = Modifier.size(24.dp)
+                )
+                Text(
+                    text = "التنبيه وسماع الأذان قبل وقته ⏱️🔊",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = SoftGoldBright
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Text(
+                    text = "اختر توقيت التنبيه المسبق للاستعداد والوضوء لصلاة $nextPrayerName:",
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                    color = IvoryWhite
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf(3, 5, 10, 15, 20).forEach { mins ->
+                        val isSelected = currentMinutes == mins
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (isSelected) EmeraldDark else MidnightNavySurface)
+                                .border(
+                                    1.dp,
+                                    if (isSelected) SoftGoldBright else GlassBorder.copy(alpha = 0.3f),
+                                    RoundedCornerShape(10.dp)
+                                )
+                                .clickable { onSetMinutes(mins) }
+                                .padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "$mins د",
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                ),
+                                color = if (isSelected) SoftGoldBright else IvoryMuted
+                            )
+                        }
+                    }
+                }
+
+                Divider(color = GlassBorder.copy(alpha = 0.3f), thickness = 0.8.dp)
+
+                Text(
+                    text = "سماع الأذان المسبق مباشرة قبل حلول الموعد:",
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                    color = IvoryMuted
+                )
+
+                Button(
+                    onClick = onToggleListenEarly,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isAzanPlaying) EmeraldDark else SoftGoldDark
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, if (isAzanPlaying) EmeraldLight else SoftGoldBright)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isAzanPlaying) Icons.Default.StopCircle else Icons.Default.Campaign,
+                            contentDescription = null,
+                            tint = if (isAzanPlaying) EmeraldLight else SoftGoldBright,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = if (isAzanPlaying) "إيقاف أذان $nextPrayerName ⏹️" else "استمع لأذان $nextPrayerName الآن 🔊",
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                            color = IvoryWhite
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(text = "تم وحفظ", color = SoftGoldBright, fontWeight = FontWeight.Bold)
+            }
+        }
+    )
 }

@@ -23,9 +23,11 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.CalculationMethod
 import com.example.data.model.JuristicMethod
 import com.example.data.model.MuezzinVoice
+import com.example.data.model.PrayerType
 import com.example.ui.components.*
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.NoorUiState
+import java.util.Calendar
 
 @Composable
 fun MoreScreen(
@@ -41,12 +43,26 @@ fun MoreScreen(
     onToggleMuezzinPreview: (MuezzinVoice) -> Unit = {},
     onPlayToneTest: () -> Unit,
     onOpenPrayerAzanSettings: () -> Unit = {},
+    onToggleAutoPhoneTime: (Boolean) -> Unit = {},
+    onSyncWithPhoneNow: () -> Unit = {},
+    onToggle24HourFormat: (Boolean) -> Unit = {},
+    onSetPrayerManualOffset: (PrayerType, Int) -> Unit = { _, _ -> },
+    onResetPrayerManualOffsets: () -> Unit = {},
+    onAdjustManualTimeMinutes: (Int) -> Unit = {},
+    onSetManualTimeOffset: (Int) -> Unit = {},
+    onSetSpecificCustomTime: (Int, Int) -> Unit = { _, _ -> },
+    onSetHijriDateAdjustment: (Int) -> Unit = {},
+    onSelectCustomDate: (Calendar) -> Unit = {},
+    onSetSpecificCustomDate: (Int, Int, Int) -> Unit = { _, _, _ -> },
+    onResetDateToToday: () -> Unit = {},
+    onResetAllTimeAndDateSettings: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showRamadanSheet by remember { mutableStateOf(false) }
     var showSettingsSheet by remember { mutableStateOf(false) }
     var showTravelDialog by remember { mutableStateOf(false) }
     var showCalendarEventsDialog by remember { mutableStateOf(false) }
+    var showTimeDateDialog by remember { mutableStateOf(false) }
 
 
     Box(
@@ -138,6 +154,14 @@ fun MoreScreen(
                     )
 
                     MoreFeatureCard(
+                        title = "تعديل وضبط الوقت والتاريخ ⏱️📅",
+                        subtitle = "تقديم/تأخير الساعة، تعديل التاريخ الهجري (رؤية الهلال)، وتحديد يوم مخصص",
+                        icon = Icons.Default.EditCalendar,
+                        accentColor = SoftGoldBright,
+                        onClick = { showTimeDateDialog = true }
+                    )
+
+                    MoreFeatureCard(
                         title = "إعدادات المواقيت والحسابات الفلكية ⚙️",
                         subtitle = "أم القرى، رابطة العالم الإسلامي، المذهب الفقهي، والأذان",
                         icon = Icons.Default.Settings,
@@ -147,6 +171,70 @@ fun MoreScreen(
                 }
             }
         }
+    }
+
+    // Time & Date Dedicated Management Dialog
+    if (showTimeDateDialog) {
+        AlertDialog(
+            onDismissRequest = { showTimeDateDialog = false },
+            containerColor = MidnightNavyCard,
+            title = {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.EditCalendar,
+                            contentDescription = null,
+                            tint = SoftGoldBright,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Text(
+                            text = "تعديل وضبط الوقت والتاريخ ⏱️📅",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = SoftGoldBright
+                        )
+                    }
+                    IconButton(onClick = { showTimeDateDialog = false }) {
+                        Icon(imageVector = Icons.Default.Close, contentDescription = "إغلاق", tint = IvoryWhite)
+                    }
+                }
+            },
+            text = {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(480.dp)
+                ) {
+                    item {
+                        TimeDateSettingsCard(
+                            uiState = uiState,
+                            onToggleAutoPhoneTime = onToggleAutoPhoneTime,
+                            onSyncWithPhoneNow = onSyncWithPhoneNow,
+                            onToggle24HourFormat = onToggle24HourFormat,
+                            onAdjustManualTimeMinutes = onAdjustManualTimeMinutes,
+                            onSetManualTimeOffset = onSetManualTimeOffset,
+                            onSetSpecificCustomTime = onSetSpecificCustomTime,
+                            onSetHijriDateAdjustment = onSetHijriDateAdjustment,
+                            onSelectCustomDate = onSelectCustomDate,
+                            onSetSpecificCustomDate = onSetSpecificCustomDate,
+                            onResetDateToToday = onResetDateToToday,
+                            onResetAllTimeAndDateSettings = onResetAllTimeAndDateSettings
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showTimeDateDialog = false }) {
+                    Text(text = "تم وحفظ الإعدادات", color = SoftGoldBright, fontWeight = FontWeight.Bold)
+                }
+            }
+        )
     }
 
     // Ramadan Dialog
@@ -243,6 +331,19 @@ fun MoreScreen(
             onVolumeChange = onVolumeChange,
             onToggleMuezzinPreview = onToggleMuezzinPreview,
             onPlayToneTest = onPlayToneTest,
+            onToggleAutoPhoneTime = onToggleAutoPhoneTime,
+            onSyncWithPhoneNow = onSyncWithPhoneNow,
+            onToggle24HourFormat = onToggle24HourFormat,
+            onSetPrayerManualOffset = onSetPrayerManualOffset,
+            onResetPrayerManualOffsets = onResetPrayerManualOffsets,
+            onAdjustManualTimeMinutes = onAdjustManualTimeMinutes,
+            onSetManualTimeOffset = onSetManualTimeOffset,
+            onSetSpecificCustomTime = onSetSpecificCustomTime,
+            onSetHijriDateAdjustment = onSetHijriDateAdjustment,
+            onSelectCustomDate = onSelectCustomDate,
+            onSetSpecificCustomDate = onSetSpecificCustomDate,
+            onResetDateToToday = onResetDateToToday,
+            onResetAllTimeAndDateSettings = onResetAllTimeAndDateSettings,
             onDismiss = { showSettingsSheet = false }
         )
     }

@@ -38,6 +38,8 @@ fun PrayerTimeScheduleCard(
     muezzinName: String? = null,
     volumePercent: Int? = null,
     onConfigureSound: (() -> Unit)? = null,
+    isAdhanPlaying: Boolean = false,
+    onToggleListenAdhanEarly: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val isNext = prayer.isNext
@@ -141,6 +143,21 @@ fun PrayerTimeScheduleCard(
                         color = if (isNext) SoftGoldBright else IvoryWhite
                     )
 
+                    // Button to listen to the Adhan early before prayer time
+                    if (onToggleListenAdhanEarly != null && prayer.type != PrayerType.SUNRISE) {
+                        IconButton(
+                            onClick = onToggleListenAdhanEarly,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isAdhanPlaying) Icons.Default.StopCircle else Icons.Default.Campaign,
+                                contentDescription = if (isAdhanPlaying) "إيقاف الأذان" else "سماع الأذان قبل وقته",
+                                tint = if (isAdhanPlaying) EmeraldLight else SoftGoldBright,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+
                     IconButton(
                         onClick = onToggleAzan,
                         modifier = Modifier.size(36.dp)
@@ -155,21 +172,23 @@ fun PrayerTimeScheduleCard(
                 }
             }
 
-            // Optional Footer row showing assigned Muezzin & Volume with quick tap
+            // Optional Footer row showing assigned Muezzin & Volume with quick tap & instant Adhan preview
             if (muezzinName != null && volumePercent != null) {
                 Divider(color = GlassBorder.copy(alpha = 0.15f), thickness = 0.6.dp)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(6.dp))
-                        .clickable(enabled = onConfigureSound != null) { onConfigureSound?.invoke() }
                         .padding(horizontal = 4.dp, vertical = 2.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable(enabled = onConfigureSound != null) { onConfigureSound?.invoke() }
+                            .padding(horizontal = 4.dp, vertical = 2.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.VolumeUp,
@@ -182,17 +201,52 @@ fun PrayerTimeScheduleCard(
                             style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
                             color = if (isAzanEnabled) SoftGoldBright else TextMuted
                         )
+                        if (onConfigureSound != null) {
+                            Text(
+                                text = "تعديل ⚙️",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                ),
+                                color = EmeraldLight
+                            )
+                        }
                     }
 
-                    if (onConfigureSound != null) {
-                        Text(
-                            text = "تعديل ⚙️",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.SemiBold
-                            ),
-                            color = EmeraldLight
-                        )
+                    // Direct early Adhan listen button in footer
+                    if (onToggleListenAdhanEarly != null && prayer.type != PrayerType.SUNRISE) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isAdhanPlaying) EmeraldDark else SoftGoldDark.copy(alpha = 0.6f))
+                                .border(
+                                    0.8.dp,
+                                    if (isAdhanPlaying) EmeraldLight else SoftGold.copy(alpha = 0.8f),
+                                    RoundedCornerShape(8.dp)
+                                )
+                                .clickable { onToggleListenAdhanEarly() }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (isAdhanPlaying) Icons.Default.StopCircle else Icons.Default.Hearing,
+                                    contentDescription = if (isAdhanPlaying) "إيقاف الأذان" else "سماع الأذان قبل وقته",
+                                    tint = if (isAdhanPlaying) EmeraldLight else SoftGoldBright,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Text(
+                                    text = if (isAdhanPlaying) "إيقاف ⏹️" else "سماع الأذان 🔊",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    color = if (isAdhanPlaying) IvoryWhite else SoftGoldBright
+                                )
+                            }
+                        }
                     }
                 }
             }

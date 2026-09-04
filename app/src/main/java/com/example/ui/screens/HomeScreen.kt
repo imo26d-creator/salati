@@ -19,6 +19,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.model.PrayerType
 import com.example.ui.components.*
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.AtmosphereTime
@@ -36,9 +37,12 @@ fun HomeScreen(
     onChecklistToggle: (String) -> Unit,
     onIncrementDhikr: () -> Unit,
     onOpenSettings: () -> Unit,
+    onToggleListenAdhanEarly: (PrayerType) -> Unit = {},
+    onSetPreAlertMinutes: (Int) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showPrepareDialog by remember { mutableStateOf(false) }
+    var showPreAlertDialog by remember { mutableStateOf(false) }
 
     val backgroundGradient = when (uiState.atmosphere) {
         AtmosphereTime.FAJR -> AtmosphereGradients.FajrGradient
@@ -107,7 +111,9 @@ fun HomeScreen(
             item {
                 PrayerCountdownHero(
                     uiState = uiState,
-                    onPrepareClick = { showPrepareDialog = true }
+                    onPrepareClick = { showPrepareDialog = true },
+                    onToggleListenAdhanEarly = onToggleListenAdhanEarly,
+                    onOpenPreAlertSettings = { showPreAlertDialog = true }
                 )
             }
 
@@ -313,6 +319,18 @@ fun HomeScreen(
                     Text(text = "تقبل الله طاعتكم", color = EmeraldLight)
                 }
             }
+        )
+    }
+
+    // "التنبيه وسماع الأذان قبل وقته" Pre-prayer early alert config dialog
+    if (showPreAlertDialog && uiState.nextPrayer != null) {
+        PreAdhanAlertConfigDialog(
+            currentMinutes = uiState.prePrayerAlertMinutes,
+            isAzanPlaying = uiState.isAzanAudioPlaying,
+            nextPrayerName = uiState.nextPrayer.type.arabicName,
+            onSetMinutes = onSetPreAlertMinutes,
+            onToggleListenEarly = { onToggleListenAdhanEarly(uiState.nextPrayer.type) },
+            onDismiss = { showPreAlertDialog = false }
         )
     }
 }

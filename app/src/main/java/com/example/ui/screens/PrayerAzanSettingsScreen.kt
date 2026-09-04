@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -574,6 +575,37 @@ fun PrayerAzanSettingsScreen(
                                     text = "صوت موحد (85%)",
                                     style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
                                     color = EmeraldLight
+                                )
+                            }
+                        }
+
+                        // Button: سماع الأذان قبل وقته (لصلاتك القادمة أو الحالية)
+                        val nextP = uiState.nextPrayer?.type ?: PrayerType.DHUHR
+                        val isPlayingAny = uiState.isAzanAudioPlaying
+                        Button(
+                            onClick = { onTogglePrayerPreview(nextP) },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isPlayingAny) Color(0xFFC62828) else SoftGoldDark
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, if (isPlayingAny) Color.White else SoftGoldBright),
+                            modifier = Modifier.fillMaxWidth(),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (isPlayingAny) Icons.Default.StopCircle else Icons.Default.Hearing,
+                                    contentDescription = null,
+                                    tint = if (isPlayingAny) Color.White else SoftGoldBright,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(
+                                    text = if (isPlayingAny) "إيقاف الأذان الحالي ⏹️" else "سماع أذان ${nextP.arabicName} قبل وقته 🔊",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = IvoryWhite
                                 )
                             }
                         }

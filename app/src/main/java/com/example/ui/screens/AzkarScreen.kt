@@ -48,10 +48,22 @@ fun AzkarScreen(
     onDeleteCustomDhikr: (String) -> Unit = {},
     onDismissTasbihCelebration: () -> Unit = {},
     onSelectTasbihDhikr: (String, Int) -> Unit,
+    onSaveMorningAzkarNotification: (Boolean, Int, Int) -> Unit = { _, _, _ -> },
+    onSaveEveningAzkarNotification: (Boolean, Int, Int) -> Unit = { _, _, _ -> },
+    onSendTestAzkarNotification: (Boolean) -> Unit = {},
+    onRecordAzkarCompleted: (DhikrCategory) -> Unit = {},
+    onClearAzkarFeedback: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var selectedTab by remember { mutableStateOf(0) } // 0: الأذكار, 1: السبحة الذكية, 2: الأدعية
     var activeCategoryReading by remember { mutableStateOf<DhikrCategory?>(null) }
+
+    LaunchedEffect(uiState.targetOpenAzkarCategory) {
+        if (uiState.targetOpenAzkarCategory != null) {
+            activeCategoryReading = uiState.targetOpenAzkarCategory
+            selectedTab = 0
+        }
+    }
 
     Box(
         modifier = modifier
@@ -61,9 +73,13 @@ fun AzkarScreen(
     ) {
         if (activeCategoryReading != null) {
             val list = AzkarDataRepository.getAzkarByCategory(activeCategoryReading!!)
+            val currentCat = activeCategoryReading!!
             InteractiveAzkarReader(
                 dhikrList = list,
-                onClose = { activeCategoryReading = null }
+                onClose = { activeCategoryReading = null },
+                onCompleteSession = {
+                    onRecordAzkarCompleted(currentCat)
+                }
             )
         } else if (selectedTab == 1) {
             // Dedicated full Digital Tasbih Screen Experience with back to tabs
@@ -172,6 +188,22 @@ fun AzkarScreen(
 
                 when (selectedTab) {
                     0 -> {
+                        // Daily Azkar Notifications & Consistency Booster Card
+                        item {
+                            AzkarNotificationCard(
+                                morningEnabled = uiState.morningAzkarEnabled,
+                                morningHour = uiState.morningAzkarHour,
+                                morningMinute = uiState.morningAzkarMinute,
+                                eveningEnabled = uiState.eveningAzkarEnabled,
+                                eveningHour = uiState.eveningAzkarHour,
+                                eveningMinute = uiState.eveningAzkarMinute,
+                                streakDays = uiState.azkarStreakDays,
+                                onSaveMorning = onSaveMorningAzkarNotification,
+                                onSaveEvening = onSaveEveningAzkarNotification,
+                                onSendTestNotification = onSendTestAzkarNotification
+                            )
+                        }
+
                         // Azkar Categories Grid
                         item {
                             Text(
@@ -218,6 +250,27 @@ fun AzkarScreen(
                         }
                     }
                 }
+            }
+        }
+
+        // Feedback Snackbar (e.g. "تم ضبط إشعار أذكار الصباح بنجاح")
+        if (uiState.azkarFeedbackMessage != null) {
+            Snackbar(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 80.dp, start = 16.dp, end = 16.dp),
+                containerColor = EmeraldDark,
+                contentColor = IvoryWhite,
+                action = {
+                    TextButton(onClick = onClearAzkarFeedback) {
+                        Text("حسناً", color = SoftGoldBright, fontWeight = FontWeight.Bold)
+                    }
+                }
+            ) {
+                Text(
+                    text = uiState.azkarFeedbackMessage,
+                    style = MaterialTheme.typography.bodyMedium
+                )
             }
         }
     }

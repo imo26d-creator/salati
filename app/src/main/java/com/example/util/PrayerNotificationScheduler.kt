@@ -197,16 +197,17 @@ object PrayerNotificationScheduler {
             manager.notify(prayerType.ordinal + 100, notification)
         } catch (_: SecurityException) {}
 
-        // Trigger Audio preview (Free from any musical instruments)
+        // Trigger Audio preview (Authentic adhan audio free from any musical instruments)
+        AzanSoundPlayer.init(context)
         when (alertType) {
             AzanAlertType.FULL_AZAN -> {
-                AzanSoundPlayer.playMuezzinPreview(muezzin, volume, prayerType)
+                AzanSoundPlayer.playMuezzinPreview(muezzin, volume, prayerType, context = context)
             }
             AzanAlertType.TAKBEER_ONLY -> {
-                AzanSoundPlayer.playTakbeerAlert(volume)
+                AzanSoundPlayer.playMuezzinPreview(MuezzinVoice.TAKBEERAT, volume, prayerType, context = context)
             }
             AzanAlertType.RECITER_VOICE -> {
-                AzanSoundPlayer.playReciterAyahAlert(volume)
+                AzanSoundPlayer.playMuezzinPreview(MuezzinVoice.RECITER_AYAH, volume, prayerType, context = context)
             }
             AzanAlertType.VIBRATE_ONLY, AzanAlertType.SILENT -> {}
         }

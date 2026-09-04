@@ -1,5 +1,6 @@
 package com.example.util
 
+import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioManager
@@ -25,6 +26,11 @@ object AzanSoundPlayer {
     private var currentJob: Job? = null
     private var mediaPlayer: MediaPlayer? = null
     private var activeAudioTrack: AudioTrack? = null
+    private var appContext: Context? = null
+
+    fun init(context: Context) {
+        appContext = context.applicationContext
+    }
 
     private val _isPlaying = MutableStateFlow(false)
     val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
@@ -81,12 +87,15 @@ object AzanSoundPlayer {
 
     /**
      * Plays preview of the selected Muezzin at the given volume (0.0f to 1.0f).
+     * Plays authentic human voice recording from bundled raw resources first,
+     * with transparent fallback to online verified audio stream, and lastly synthesized tones.
      */
     fun playMuezzinPreview(
         muezzin: MuezzinVoice,
-        volume: Float = 0.8f,
+        volume: Float = 0.85f,
         prayerType: PrayerType? = null,
-        onComplete: (() -> Unit)? = null
+        onComplete: (() -> Unit)? = null,
+        context: Context? = null
     ) {
         stop()
 
@@ -95,10 +104,42 @@ object AzanSoundPlayer {
         _playingPrayer.value = prayerType
 
         val safeVol = volume.coerceIn(0.05f, 1.0f)
+        val ctx = context ?: appContext
 
-        currentJob = scope.launch {
-            if (muezzin.audioUrl.isNotBlank()) {
-                var prepareFailed = false
+        currentJob = scope.launch(Dispatchers.Main) {
+            var played = false
+
+            // 1. Play authentic local raw recording (100% offline, zero latency, genuine human voice)
+            if (ctx != null && muezzin.rawResId != 0) {
+                try {
+                    val mp = MediaPlayer.create(ctx, muezzin.rawResId)
+                    if (mp != null) {
+                        mediaPlayer = mp
+                        mp.setVolume(safeVol, safeVol)
+                        mp.setOnCompletionListener {
+                            stop()
+                            onComplete?.invoke()
+                        }
+                        mp.setOnErrorListener { player, _, _ ->
+                            safeReleaseMediaPlayer(player)
+                            if (mediaPlayer == player) {
+                                mediaPlayer = null
+                            }
+                            _isPlaying.value = false
+                            _playingMuezzin.value = null
+                            _playingPrayer.value = null
+                            true
+                        }
+                        mp.start()
+                        played = true
+                    }
+                } catch (_: Exception) {
+                    played = false
+                }
+            }
+
+            // 2. If raw was not played, stream high-fidelity remote audio
+            if (!played && muezzin.audioUrl.isNotBlank()) {
                 try {
                     withContext(Dispatchers.IO) {
                         val mp = MediaPlayer()
@@ -135,18 +176,18 @@ object AzanSoundPlayer {
                             }
                         }
                         mp.prepareAsync()
+                        played = true
                     }
                 } catch (_: Exception) {
-                    prepareFailed = true
-                }
-
-                if (prepareFailed) {
                     val mp = mediaPlayer
                     mediaPlayer = null
                     safeReleaseMediaPlayer(mp)
-                    playSynthesizedMaqam(muezzin, safeVol, onComplete)
+                    played = false
                 }
-            } else {
+            }
+
+            // 3. Fallback tone synthesis if both raw and online streams are unavailable
+            if (!played) {
                 playSynthesizedMaqam(muezzin, safeVol, onComplete)
             }
         }

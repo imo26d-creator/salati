@@ -756,6 +756,14 @@ fun SettingsSheetDialog(
     onToggle24HourFormat: (Boolean) -> Unit = {},
     onSetPrayerManualOffset: (PrayerType, Int) -> Unit = { _, _ -> },
     onResetPrayerManualOffsets: () -> Unit = {},
+    onAdjustManualTimeMinutes: (Int) -> Unit = {},
+    onSetManualTimeOffset: (Int) -> Unit = {},
+    onSetSpecificCustomTime: (Int, Int) -> Unit = { _, _ -> },
+    onSetHijriDateAdjustment: (Int) -> Unit = {},
+    onSelectCustomDate: (Calendar) -> Unit = {},
+    onSetSpecificCustomDate: (Int, Int, Int) -> Unit = { _, _, _ -> },
+    onResetDateToToday: () -> Unit = {},
+    onResetAllTimeAndDateSettings: () -> Unit = {},
     onDismiss: () -> Unit
 ) {
     var showManualOffsets by remember { mutableStateOf(false) }
@@ -786,231 +794,77 @@ fun SettingsSheetDialog(
                     .height(480.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Section 0: Device Time Settings & Auto Phone Time Sync (المزامنة التلقائية مع وقت الهاتف الحالي)
+                // Section 0: Full Time & Date Settings & Adjustments (تعديل الوقت والتاريخ)
+                item {
+                    TimeDateSettingsCard(
+                        uiState = uiState,
+                        onToggleAutoPhoneTime = onToggleAutoPhoneTime,
+                        onSyncWithPhoneNow = onSyncWithPhoneNow,
+                        onToggle24HourFormat = onToggle24HourFormat,
+                        onAdjustManualTimeMinutes = onAdjustManualTimeMinutes,
+                        onSetManualTimeOffset = onSetManualTimeOffset,
+                        onSetSpecificCustomTime = onSetSpecificCustomTime,
+                        onSetHijriDateAdjustment = onSetHijriDateAdjustment,
+                        onSelectCustomDate = onSelectCustomDate,
+                        onSetSpecificCustomDate = onSetSpecificCustomDate,
+                        onResetDateToToday = onResetDateToToday,
+                        onResetAllTimeAndDateSettings = onResetAllTimeAndDateSettings
+                    )
+                }
+
+                // Section 0.5: Local Mosque Fine-Tuning (± دقيقة لكل صلاة)
                 item {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
                             .background(MidnightNavySurface.copy(alpha = 0.95f))
-                            .border(1.dp, SoftGoldBright.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+                            .border(1.dp, SoftGold.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
                             .padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Schedule,
-                                    contentDescription = null,
-                                    tint = SoftGoldBright,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Text(
-                                    text = "إعدادات الوقت وساعة الهاتف",
-                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = IvoryWhite
-                                )
-                            }
                             Text(
-                                text = if (uiState.deviceCurrentTimeFormatted.isNotEmpty())
-                                    uiState.deviceCurrentTimeFormatted
-                                else
-                                    "مباشر",
-                                style = MaterialTheme.typography.labelMedium.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp
-                                ),
+                                text = "ضبط مواقيت المسجد المحلي (± دقائق)",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                                 color = SoftGoldBright
                             )
-                        }
-
-                        if (uiState.deviceTimeZoneName.isNotEmpty()) {
-                            Text(
-                                text = "توقيت الهاتف: ${uiState.deviceTimeZoneName}",
-                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                color = IvoryMuted
-                            )
-                        }
-
-                        // Success banner on sync
-                        AnimatedVisibility(visible = uiState.timeSyncSuccessMessage != null) {
-                            uiState.timeSyncSuccessMessage?.let { msg ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(EmeraldDark.copy(alpha = 0.8f))
-                                        .padding(horizontal = 8.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.CheckCircle,
-                                        contentDescription = null,
-                                        tint = EmeraldLight,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Text(
-                                        text = msg,
-                                        style = MaterialTheme.typography.labelSmall.copy(
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold
-                                        ),
-                                        color = IvoryWhite
-                                    )
-                                }
+                            TextButton(onClick = onResetPrayerManualOffsets, contentPadding = PaddingValues(0.dp)) {
+                                Text("تصفير الإزاحات", fontSize = 11.sp, color = IvoryMuted)
                             }
                         }
 
-                        Divider(color = GlassBorder.copy(alpha = 0.2f), thickness = 0.8.dp)
-
-                        // Auto Phone Time Toggle
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "المزامنة التلقائية مع وقت الهاتف",
-                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                                    color = IvoryWhite
-                                )
-                                Text(
-                                    text = "تحديث التوقيت مباشرة حسب ساعة هاتفك الحالي",
-                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
-                                    color = IvoryMuted
-                                )
-                            }
-                            Switch(
-                                checked = uiState.isAutoPhoneTime,
-                                onCheckedChange = onToggleAutoPhoneTime,
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = SoftGoldBright,
-                                    checkedTrackColor = EmeraldPrimary,
-                                    uncheckedThumbColor = TextMuted,
-                                    uncheckedTrackColor = MidnightNavyCard
-                                )
-                            )
-                        }
-
-                        // 24 Hour Format Toggle
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "تنسيق 24 ساعة",
-                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                                    color = IvoryWhite
-                                )
-                                Text(
-                                    text = if (uiState.is24HourFormat) "صيغة 24 ساعة مفعلة" else "صيغة 12 ساعة (ص/م)",
-                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
-                                    color = SoftGoldBright
-                                )
-                            }
-                            Switch(
-                                checked = uiState.is24HourFormat,
-                                onCheckedChange = onToggle24HourFormat,
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = SoftGoldBright,
-                                    checkedTrackColor = EmeraldPrimary,
-                                    uncheckedThumbColor = TextMuted,
-                                    uncheckedTrackColor = MidnightNavyCard
-                                )
-                            )
-                        }
-
-                        // Sync Now Button
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Button(
-                                onClick = onSyncWithPhoneNow,
-                                colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.weight(1f),
-                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+                        listOf(
+                            PrayerType.FAJR,
+                            PrayerType.DHUHR,
+                            PrayerType.ASR,
+                            PrayerType.MAGHRIB,
+                            PrayerType.ISHA
+                        ).forEach { p ->
+                            val off = uiState.prayerManualOffsets[p] ?: 0
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(imageVector = Icons.Default.Sync, contentDescription = null, tint = IvoryWhite, modifier = Modifier.size(15.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("مزامنة فورية من الهاتف ⏱️", fontSize = 11.sp, color = IvoryWhite)
-                            }
-
-                            OutlinedButton(
-                                onClick = { showManualOffsets = !showManualOffsets },
-                                shape = RoundedCornerShape(8.dp),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, SoftGold.copy(alpha = 0.4f)),
-                                modifier = Modifier.weight(1f),
-                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
-                            ) {
-                                Icon(imageVector = Icons.Default.Tune, contentDescription = null, tint = SoftGoldBright, modifier = Modifier.size(15.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(if (showManualOffsets) "إغلاق الضبط" else "ضبط المسجد (±د)", fontSize = 11.sp, color = SoftGoldBright)
-                            }
-                        }
-
-                        // Expandable manual adjustments
-                        AnimatedVisibility(visible = showManualOffsets) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(MidnightNavyCard)
-                                    .padding(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text("تعديل دقائق الصلاة (± دقائق):", fontSize = 11.sp, color = SoftGold, fontWeight = FontWeight.Bold)
-                                    TextButton(onClick = onResetPrayerManualOffsets, contentPadding = PaddingValues(0.dp)) {
-                                        Text("تصفير", fontSize = 10.sp, color = IvoryMuted)
+                                Text(p.arabicName, fontSize = 12.sp, color = IvoryWhite)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(onClick = { onSetPrayerManualOffset(p, off - 1) }, modifier = Modifier.size(28.dp)) {
+                                        Icon(Icons.Default.RemoveCircleOutline, null, tint = SoftGold, modifier = Modifier.size(18.dp))
                                     }
-                                }
-
-                                listOf(
-                                    PrayerType.FAJR,
-                                    PrayerType.DHUHR,
-                                    PrayerType.ASR,
-                                    PrayerType.MAGHRIB,
-                                    PrayerType.ISHA
-                                ).forEach { p ->
-                                    val off = uiState.prayerManualOffsets[p] ?: 0
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(p.arabicName, fontSize = 11.sp, color = IvoryWhite)
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            IconButton(onClick = { onSetPrayerManualOffset(p, off - 1) }, modifier = Modifier.size(24.dp)) {
-                                                Icon(Icons.Default.RemoveCircleOutline, null, tint = SoftGold, modifier = Modifier.size(18.dp))
-                                            }
-                                            Text(
-                                                text = if (off > 0) "+$off د" else "$off د",
-                                                fontSize = 11.sp,
-                                                color = if (off != 0) EmeraldLight else IvoryMuted,
-                                                modifier = Modifier.width(32.dp),
-                                                textAlign = TextAlign.Center
-                                            )
-                                            IconButton(onClick = { onSetPrayerManualOffset(p, off + 1) }, modifier = Modifier.size(24.dp)) {
-                                                Icon(Icons.Default.AddCircleOutline, null, tint = SoftGoldBright, modifier = Modifier.size(18.dp))
-                                            }
-                                        }
+                                    Text(
+                                        text = if (off > 0) "+$off د" else "$off د",
+                                        fontSize = 11.sp,
+                                        color = if (off != 0) EmeraldLight else IvoryMuted,
+                                        modifier = Modifier.width(36.dp),
+                                        textAlign = TextAlign.Center
+                                    )
+                                    IconButton(onClick = { onSetPrayerManualOffset(p, off + 1) }, modifier = Modifier.size(28.dp)) {
+                                        Icon(Icons.Default.AddCircleOutline, null, tint = SoftGoldBright, modifier = Modifier.size(18.dp))
                                     }
                                 }
                             }
